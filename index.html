@@ -380,7 +380,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20 17:42';
+var BUILD = '2026-11-20 17:48';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -4304,7 +4304,15 @@ else if(location.search.indexOf('rs=1') >= 0){
 if('serviceWorker' in navigator &&
    (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
   window.addEventListener('load', function(){
-    try{ navigator.serviceWorker.register('./sw.js').catch(function(){}); }catch(e){}
+    try{
+      /* 新版本接管时自己刷一次。以前改了代码，装到桌面上的那个窗口
+         死活不换，得手动去清缓存才看得到新版 */
+      var hadCtrl = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function(){
+        if(hadCtrl && !window.__swReload){ window.__swReload = 1; location.reload(); }
+      });
+      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    }catch(e){}
   });
 }
 </script>
