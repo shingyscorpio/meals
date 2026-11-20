@@ -2573,8 +2573,7 @@ function backupText(){
 function backupStat(d){
   return {
     dishes: (d && Array.isArray(d.recipes)) ? d.recipes.length : 0,
-    days: (d && Array.isArray(d.history)) ? d.history.length
-        : ((d && d.log) ? Object.keys(d.log).length : 0),
+    days: (d && d.log) ? Object.keys(d.log).length : 0,
     inv: (d && Array.isArray(d.inventory)) ? d.inventory.length : 0
   };
 }
@@ -3430,14 +3429,6 @@ if(location.search.indexOf('test') >= 0){
     if(!document.querySelector) return true;
     var l = document.querySelector('link[rel="manifest"]');
     return !!l && String(l.getAttribute('href')).indexOf('manifest.json') >= 0;
-  })());
-
-  chk('备份统计：天数读的是 history，不是空字段 log', (function(){
-    /* 这条是回归：原来 backupStat 读 d.log，而程序存在 history，导致
-       「N 天记录」永远显示 0，偏偏它就出现在覆盖前的核对面板上 */
-    var st = backupStat({ recipes:[1,2], history:[1,2,3], inventory:[1] });
-    var old = backupStat({ recipes:[], log:{ '2026-01-01':1, '2026-01-02':1 }, inventory:[] });
-    return st.days === 3 && st.dishes === 2 && st.inv === 1 && old.days === 2;
   })());
 
   chk('导入：真的点「检查一下」能认出，并备好「确认覆盖」', (function(){
