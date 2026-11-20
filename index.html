@@ -4,6 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>今天这顿 · Demo</title>
+<link rel="manifest" href="./manifest.json" />
+<meta name="theme-color" content="#3C6B4F" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="今天这顿" />
+<link rel="apple-touch-icon" href="./icon-192.png" />
+<link rel="icon" type="image/png" href="./icon-192.png" />
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0}
@@ -616,6 +624,8 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    状态
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
+/* 改完东西改这里，方便你核对手机上打开的是不是新版 */
+var BUILD = '2026-11-20';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2537,6 +2547,8 @@ function sheetSettings(){
   h += '<div style="font-size:12px;color:#A9A398;line-height:1.7;margin-top:4px">' +
        '只算你自己加的菜、改过的、库存和这阵子的记录；内置菜谱在程序里，不占这份。' +
        '一道菜谱大约 1 KB，5 MB 能存几千道。</div>';
+  h += '<div class="setrow" style="margin-top:8px"><span>版本</span>' +
+       '<span style="font-size:12.5px;color:#8A8478">' + BUILD + '</span></div>';
   /* 备份：数据只在这台设备上，换设备/清缓存/换地址都会读不到，这是唯一的兜底 */
   h += '<div style="margin-top:18px;border-top:1px solid #E7E2D7;padding-top:14px">' +
        '<div style="font-size:13px;font-weight:500;margin-bottom:4px">备份</div>' +
@@ -3408,6 +3420,17 @@ if(location.search.indexOf('test') >= 0){
     return safe && armed;
   })());
 
+  chk('版本号：设置页显示构建日期，能核对线上是不是新版', (function(){
+    return BUILD.length === 10 && sheetSettings().indexOf(BUILD) >= 0;
+  })());
+
+  chk('PWA：head 里挂了 manifest 图标清单', (function(){
+    /* 命令行 stub 没有 querySelector，跳过这条，浏览器里 ?test=1 才真验 */
+    if(!document.querySelector) return true;
+    var l = document.querySelector('link[rel="manifest"]');
+    return !!l && String(l.getAttribute('href')).indexOf('manifest.json') >= 0;
+  })());
+
   chk('导入：真的点「检查一下」能认出，并备好「确认覆盖」', (function(){
     var box = document.getElementById('rsTxt');
     if(!box){ ui.rsInfo = null; return false; }
@@ -4071,6 +4094,14 @@ else if(location.search.indexOf('bk=1') >= 0){
 }
 else if(location.search.indexOf('rs=1') >= 0){
   ui.sheet = true; ui.sheetType = 'restore'; renderSheet();
+}
+
+/* 只有 https（或 localhost）才注册 sw。file:// 和局域网 http 下注册会报错，直接跳过 */
+if('serviceWorker' in navigator &&
+   (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
+  window.addEventListener('load', function(){
+    try{ navigator.serviceWorker.register('./sw.js').catch(function(){}); }catch(e){}
+  });
 }
 </script>
 </body>
