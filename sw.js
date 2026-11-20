@@ -1,7 +1,7 @@
 /* service worker：让页面断网也能打开，第二次启动不用等网络
    策略是先给缓存、后台顺便更新（stale-while-revalidate）——
    早上急着看吃什么时，不用等网络转圈 */
-const CACHE = 'meals-v2';
+const CACHE = 'meals-v3';
 const ASSETS = ['./', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
