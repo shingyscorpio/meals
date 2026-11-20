@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>加菜谱</title>
+<style>
+  html,body{margin:0;background:#FAF7F0;color:#201E19;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:430px;margin:0 auto;padding:32px 20px 60px}
+  h1{font-size:19px;margin:0 0 6px;font-weight:650}
+  .sub{font-size:13px;color:#8A8478;line-height:1.75;margin-bottom:16px}
+  .list{background:#fff;border:1px solid #E9E4D9;border-radius:14px;overflow:hidden;margin-bottom:18px}
+  .row{padding:11px 14px;border-bottom:1px solid #F0ECE2;font-size:13.5px;display:flex;
+    justify-content:space-between;align-items:center;gap:10px}
+  .row:last-child{border-bottom:0}
+  .row .n{font-weight:600}
+  .row .by{color:#8A8478;font-size:11.5px;margin-left:6px;font-weight:400}
+  .row .cat{font-size:11px;color:#3C6B4F;background:#EDF3EE;border-radius:7px;padding:2px 7px;flex:none}
+  button{display:block;width:100%;padding:13px;border-radius:12px;border:1px solid #DED8CA;
+    background:#fff;color:#201E19;font-size:14.5px;font-family:inherit;margin-bottom:10px;cursor:pointer}
+  button.primary{background:#3C6B4F;border-color:#3C6B4F;color:#fff;font-weight:600}
+  button:disabled{opacity:.5}
+  .tip{font-size:12px;color:#8A8478;line-height:1.7;margin-top:4px}
+  pre{background:#fff;border:1px solid #E9E4D9;border-radius:14px;padding:13px;
+    font-size:12.5px;line-height:1.8;color:#4A463D;white-space:pre-wrap;word-break:break-word;
+    min-height:20px;margin:16px 0 0;font-family:inherit}
+  pre:empty{display:none}
+  a{display:inline-block;margin-top:14px;padding:11px 18px;border-radius:12px;
+    background:#3C6B4F;color:#fff;text-decoration:none;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>把这 5 道加进去</h1>
+  <div class="sub">不用在编辑器里一道道填。点一下按钮，菜谱直接写进「今天这顿」——
+  打开应用就能看到，用料、时间、放哪一格都算好了。</div>
+
+  <div class="list" id="list"></div>
+
+  <button class="primary" id="b5">只加这 5 道</button>
+  <button id="b51">装满：46 道基础 + 这 5 道</button>
+  <div class="tip">「装满」适合现在库里空着的时候。已经有菜就点上面那个，重复的会自动跳过。</div>
+
+  <pre id="log"></pre>
+  <a href="./index.html" id="go" style="display:none">进应用看</a>
+</div>
+<script>
+(function(){
+  var FIVE = [
+ {
+  "id": "r1",
+  "n": "手撕包菜",
+  "cat": "fiber",
+  "hand": 8,
+  "wall": 9,
+  "fire": "watch",
+  "vessel": "pan",
+  "staple": "cabbage",
+  "needs": [
+   "cabbage",
+   "porkBelly"
+  ],
+  "taste": [
+   0,
+   0,
+   2
+  ],
+  "cuisine": "中式",
+  "lv": "L1",
+  "m": "1. 包菜切掉根部，用手撕成大片。\n2. 葱白和蒜切片，干辣椒剪成段。\n3. 锅里放油，五花肉炒熟，炸到微焦出油。\n4. 下葱、姜、蒜、干辣椒炒半分钟。\n5. 包菜全部倒进去，全程大火炒两分钟。\n6. 沿锅边绕圈淋料酒，让高温把酒香蒸发出来。\n7. 加蚝油、味极鲜、蒸鱼豉油，再炒一分钟出锅。",
+  "prep": [],
+  "author": "我脑公全世界最帅"
+ },
+ {
+  "id": "r2",
+  "n": "生菜牛肉拌饭",
+  "cat": "protein",
+  "hand": 8,
+  "wall": 9,
+  "fire": "watch",
+  "vessel": "pan",
+  "staple": "beef",
+  "needs": [
+   "beef",
+   "lettuce",
+   "egg",
+   "nori",
+   "greenPepper"
+  ],
+  "taste": [
+   2,
+   0,
+   2
+  ],
+  "cuisine": "中式",
+  "lv": "L1",
+  "m": "1. 先蒸米饭，生菜切丝，牛肉切片，蒜和辣椒切碎。\n2. 牛肉加料酒1勺、生抽1勺、蚝油1勺、淀粉1勺，抓匀腌15分钟。\n3. 蒜末和青红椒碎淋热油，加生抽2勺、蚝油1勺、少许白糖调成酱汁。\n4. 油热煎两个荷包蛋，再下牛肉片炒熟。\n5. 米饭打底，摆上煎蛋、牛肉、生菜丝、海苔碎，淋酱汁拌匀。",
+  "prep": [],
+  "author": "薄荷糖的味道",
+  "red": 1
+ },
+ {
+  "id": "r3",
+  "n": "西红柿炒茄子",
+  "cat": "fiber",
+  "hand": 8,
+  "wall": 9,
+  "fire": "watch",
+  "vessel": "pan",
+  "staple": "eggplant",
+  "needs": [
+   "eggplant",
+   "tomato"
+  ],
+  "taste": [
+   0,
+   0,
+   0
+  ],
+  "cuisine": "中式",
+  "lv": "L1",
+  "m": "1. 茄子切块，加盐抓匀腌20分钟。\n2. 西红柿切块。\n3. 茄子冲水沥干，下锅煎炸到金黄色捞出。\n4. 留一勺底油，下蒜片煸香，加西红柿翻炒。\n5. 西红柿出汁后加白糖、生抽、蚝油，炒到出沙，倒回茄子大火炒匀。",
+  "prep": [],
+  "author": "辛小厨甜妈"
+ },
+ {
+  "id": "r4",
+  "n": "金针菇培根卷",
+  "cat": "fiber",
+  "hand": 3,
+  "wall": 10,
+  "fire": "off",
+  "vessel": "airfryer",
+  "staple": "bacon",
+  "needs": [
+   "bacon",
+   "enoki"
+  ],
+  "taste": [
+   0,
+   2,
+   2
+  ],
+  "cuisine": "西式",
+  "lv": "L2",
+  "m": "1. 培根提前解冻，中间切成两段；金针菇去根。\n2. 取一小撮金针菇，用培根卷起来，牙签固定。\n3. 小碗里放生抽、蚝油、料酒、黑胡椒、蜂蜜、柠檬汁、少许盐，调匀。\n4. 烤盘铺锡纸摆好，全部刷一遍调料。\n5. 烤箱上下火180度，先烤15分钟。\n6. 取出翻面再刷一遍，再烤10分钟，出锅撒白芝麻。",
+  "prep": [],
+  "author": "小贾姑娘",
+  "red": 1
+ },
+ {
+  "id": "r5",
+  "n": "蚝油香菇油菜",
+  "cat": "fiber",
+  "hand": 8,
+  "wall": 9,
+  "fire": "watch",
+  "vessel": "pan",
+  "staple": "shiitakeFresh",
+  "needs": [
+   "shiitakeFresh",
+   "yuChoy"
+  ],
+  "taste": [
+   0,
+   0,
+   0
+  ],
+  "cuisine": "中式",
+  "lv": "L1",
+  "m": "1. 油菜掰开洗净，香菇切片。\n2. 油菜下水焯30秒捞出控水。\n3. 香菇焯水2分钟捞出。\n4. 油热爆香葱蒜，下香菇翻炒。\n5. 加油菜翻炒几下，放一勺生抽、一勺蚝油、少许盐，炒匀出锅。",
+  "prep": [],
+  "author": "土豆土豆泥0"
+ }
+];
+  var KEY = 'zaocan.demo.v4';
+  var log = document.getElementById('log');
+  var go = document.getElementById('go');
+  function say(t){ log.textContent += t + '\n'; }
+  function fail(t){ log.textContent = t; }
+
+  /* 列表先渲染出来，让人知道自己要点什么 */
+  var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
+  document.getElementById('list').innerHTML = FIVE.map(function(it){
+    return '<div class="row"><span><span class="n">' + it.n + '</span>' +
+           '<span class="by">@' + (it.author || '') + '</span></span>' +
+           '<span class="cat">' + (CATN[it.cat] || it.cat) + '</span></div>';
+  }).join('');
+
+  function readState(){
+    var raw = null;
+    try{ raw = localStorage.getItem(KEY); }catch(e){}
+    if(!raw) return { ok:false, why:'empty' };
+    try{ return { ok:true, state: JSON.parse(raw) }; }
+    catch(e){ return { ok:false, why:'broken' }; }
+  }
+
+  function merge(base, list){
+    if(!Array.isArray(base.recipes)) base.recipes = [];
+    var have = {}, usedId = {};
+    base.recipes.forEach(function(r){
+      if(r && r.n) have[r.n] = 1;
+      if(r && r.id) usedId[r.id] = 1;
+    });
+    var added = [], dup = 0;
+    list.forEach(function(src){
+      if(have[src.n]){ dup++; return; }          /* 同名的已经有了，不覆盖，跳过 */
+      var it = JSON.parse(JSON.stringify(src));
+      var id = it.id, k = 2;
+      while(usedId[id]){ id = it.id + '_' + k; k++; }  /* id 撞了就换个后缀 */
+      it.id = id;
+      usedId[id] = 1; have[it.n] = 1;
+      base.recipes.push(it);
+      added.push(it.n);
+    });
+    return { added:added, dup:dup };
+  }
+
+  function commit(base, res, label){
+    /* 写之前先留一份原样，真出问题能倒退 */
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw) localStorage.setItem(KEY + '.bak', raw);
+    }catch(e){}
+    try{
+      localStorage.setItem(KEY, JSON.stringify(base));
+    }catch(e){
+      fail('写入失败：' + (e && e.message ? e.message : e) + '\n可能是浏览器存储满了。');
+      return;
+    }
+    /* 写完立刻读回来核对，别只说成功 */
+    var back = readState();
+    var ok = back.ok && res.added.every(function(n){
+      return back.state.recipes.some(function(r){ return r && r.n === n; });
+    });
+    if(!ok){ fail('写入后核对不一致，请把这段发给我。'); return; }
+
+    say('—— 完成 ——');
+    say('新加 ' + res.added.length + ' 道：' + res.added.join('、'));
+    if(res.dup) say('跳过 ' + res.dup + ' 道（库里已经有同名的）');
+    say('现在库里一共 ' + back.state.recipes.length + ' 道菜。');
+    say('');
+    say('如果桌面那个「今天这顿」图标还开着，先把它划掉，再点开——不然它显示的还是旧内容。');
+    go.style.display = 'inline-block';
+    document.getElementById('b5').disabled = true;
+    document.getElementById('b51').disabled = true;
+  }
+
+  function run(withSeed){
+    log.textContent = '';
+    var r = readState();
+    if(!r.ok){
+      if(r.why === 'empty'){
+        fail('还没有这个应用的数据。\n\n先打开一次 https://shingyscorpio.github.io/meals/ ，\n让它把本地存储建起来，再回来点这里。');
+      } else {
+        fail('本地数据读不出来（格式坏了）。\n先别在这里操作，把这段发我。');
+      }
+      return;
+    }
+    var base = r.state;
+
+    if(!withSeed){ commit(base, merge(base, FIVE), '5'); return; }
+
+    say('正在取 46 道基础菜谱…');
+    fetch('./seed-recipes.json', { cache:'no-store' })
+      .then(function(res){ if(!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then(function(seed){
+        var list = ((seed && seed.data && seed.data.recipes) || []).concat(FIVE);
+        log.textContent = '';
+        commit(base, merge(base, list), '51');
+      })
+      .catch(function(e){
+        fail('取基础菜谱失败：' + (e && e.message ? e.message : e) + '\n先点上面「只加这 5 道」，基础菜谱以后再说。');
+      });
+  }
+
+  document.getElementById('b5').addEventListener('click', function(){ run(false); });
+  document.getElementById('b51').addEventListener('click', function(){ run(true); });
+})();
+</script>
+</body>
+</html>
