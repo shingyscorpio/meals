@@ -395,7 +395,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20 21:59';
+var BUILD = '2026-11-20 23:17';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2551,6 +2551,16 @@ function sheetSettings(){
        '一道菜谱大约 1 KB，5 MB 能存几千道。</div>';
   h += '<div class="setrow" style="margin-top:8px"><span>版本</span>' +
        '<span style="font-size:12.5px;color:#8A8478">' + BUILD + '</span></div>';
+  /* 菜谱包：换设备、清了缓存、或者桌面图标那个窗口和浏览器里数据不一致时，
+     在哪个窗口点就在哪个窗口补齐。不靠跨窗口搬文件——两套存储各写各的 */
+  h += '<div style="margin-top:18px;border-top:1px solid #E7E2D7;padding-top:14px">' +
+       '<div style="font-size:13px;font-weight:500;margin-bottom:4px">菜谱包</div>' +
+       '<div style="font-size:12px;color:#A9A398;line-height:1.7;margin-bottom:9px">' +
+       '装一份现成的菜谱（示例 + 补录，共 51 道）。库里已经有的按菜名跳过，不会重复，也不会覆盖你改过的。</div></div>' +
+       '<button class="btn btn-ghost" data-act="seedAdd" style="width:100%;font-size:14px">装菜谱包</button>';
+  if(ui.setMsg){
+    h += '<div class="impinfo" style="margin-top:9px">' + ui.setMsg + '</div>';
+  }
   /* 备份：数据只在这台设备上，换设备/清缓存/换地址都会读不到，这是唯一的兜底 */
   h += '<div style="margin-top:18px;border-top:1px solid #E7E2D7;padding-top:14px">' +
        '<div style="font-size:13px;font-weight:500;margin-bottom:4px">备份</div>' +
@@ -2563,6 +2573,68 @@ function sheetSettings(){
   h += '<div style="margin-top:16px"><button class="btn btn-ghost" data-act="closesheet" style="width:100%">关闭</button></div>';
   h += '<div style="margin-top:12px"><button class="btn btn-ghost" data-act="reset" style="width:100%;font-size:12.5px;color:#A0503A">清空全部数据</button></div>';
   return h;
+}
+
+/* 把一份菜谱包并进当前库：按菜名去重，id 撞了加后缀。
+   只加不覆盖——用户改过的菜不能因为「装个包」被冲掉 */
+function mergePack(list){
+  var have = {}, used = {};
+  state.recipes.forEach(function(r){
+    if(r && r.n) have[r.n] = 1;
+    if(r && r.id) used[r.id] = 1;
+  });
+  var added = 0, dup = 0;
+  (list || []).forEach(function(src){
+    if(!src || !src.n) return;
+    if(have[src.n]){ dup++; return; }
+    var it = JSON.parse(JSON.stringify(src));
+    var base = it.id || ('m' + Date.now().toString(36) + added);
+    var id = base, k = 2;
+    while(used[id]){ id = base + '_' + k; k++; }
+    it.id = id;
+    used[id] = 1; have[it.n] = 1;
+    state.recipes.push(normItem(it));
+    added++;
+  });
+  rebuildItems(); save();
+  return { added:added, dup:dup, total:ITEMS.length };
+}
+
+function getJSON(url, ok, err){
+  try{
+    var x = new XMLHttpRequest();
+    x.open('GET', url, true);
+    x.onload = function(){
+      if(x.status >= 200 && x.status < 300){
+        try{ ok(JSON.parse(x.responseText)); }
+        catch(e){ err(new Error('内容格式不对')); }
+      } else err(new Error('HTTP ' + x.status));
+    };
+    x.onerror = function(){ err(new Error('网络没通')); };
+    x.send();
+  }catch(e){ err(e); }
+}
+
+/* 在应用内部装包。不依赖外部页面写存储——桌面图标和浏览器可能是两套，
+   谁打开的就在谁那儿装 */
+function loadPack(url, label){
+  ui.setMsg = '正在取' + label + '…';
+  renderSheet();
+  getJSON(url, function(o){
+    var list = (o && o.data && o.data.recipes) || (Array.isArray(o) ? o : []);
+    if(!list.length){
+      ui.setMsg = '这个包里没有菜谱，什么都没改。';
+      renderSheet(); return;
+    }
+    var r = mergePack(list);
+    ui.setMsg = '装好了：新增 <b>' + r.added + '</b> 道' +
+                (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
+                '。现在一共 ' + r.total + ' 道。';
+    renderSheet();
+  }, function(e){
+    ui.setMsg = '取不到菜谱包（' + (e && e.message ? e.message : '未知原因') + '）。检查网络后再点一次。';
+    renderSheet();
+  });
 }
 
 /* ============================================================
@@ -3101,7 +3173,8 @@ document.addEventListener('click', function(e){
   else if(act === 'useItUp'){ useItUp(id); }
 
   /* 设置 */
-  else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; renderSheet(); }
+  else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; ui.setMsg = ''; renderSheet(); }
+  else if(act === 'seedAdd'){ loadPack('./seed-recipes.json', '菜谱包'); }
   else if(act === 'bkOpen'){ ui.sheet = true; ui.bkText = backupText(); ui.bkMsg = null; ui.sheetType = 'backup'; renderSheet(); }
   else if(act === 'bkDownload'){ downloadBackup(); }
   else if(act === 'bkCopy'){ copyBackup(); }
@@ -3480,6 +3553,57 @@ if(location.search.indexOf('test') >= 0){
     var sh = sheetSettings();
     return sh.indexOf('导出备份') >= 0 && sh.indexOf('导入备份') >= 0 &&
            sh.indexOf('data-act="bkOpen"') >= 0 && sh.indexOf('data-act="rsOpen"') >= 0;
+  })());
+
+  chk('设置页：有装菜谱包入口', (function(){
+    ui.setMsg = '';
+    var sh = sheetSettings();
+    return sh.indexOf('菜谱包') >= 0 && sh.indexOf('data-act="seedAdd"') >= 0;
+  })());
+
+  chk('菜谱包：51 道，没有重名也没有重 id', (function(){
+    var names = {}, ids = {}, bad = [];
+    SEED.forEach(function(x){
+      if(names[x.n]) bad.push('重名 ' + x.n); names[x.n] = 1;
+      if(ids[x.id]) bad.push('重 id ' + x.id); ids[x.id] = 1;
+    });
+    return SEED.length === 51 && bad.length === 0;
+  })());
+
+  chk('装包：同名跳过，不覆盖自己改过的', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'mine1', n:'手撕包菜', cat:'fiber', hand:9, wall:9, fire:'watch',
+                       vessel:'pan', needs:['cabbage'], taste:[0,0,0], m:'我自己写的', prep:[] }];
+    state.hidden = []; rebuildItems();
+    var r = mergePack([
+      { id:'p01', n:'手撕包菜', cat:'protein', hand:1, wall:1, needs:[], m:'包里的' },
+      { id:'p02', n:'新菜甲', cat:'fiber', hand:5, wall:5, needs:['egg'], m:'1. 做' }
+    ]);
+    var mine = findItem('mine1');
+    var out = r.added === 1 && r.dup === 1 && mine && mine.m === '我自己写的' && !!findItem('p02');
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：id 撞车时换 id，不顶掉原来那道', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'x01', n:'甲', cat:'fiber', hand:5, wall:5, needs:[], m:'' }];
+    state.hidden = []; rebuildItems();
+    var r = mergePack([{ id:'x01', n:'乙', cat:'fiber', hand:5, wall:5, needs:[], m:'' }]);
+    var out = r.added === 1 && ITEMS.length === 2 &&
+              ITEMS.some(function(x){ return x.n === '甲'; }) &&
+              ITEMS.some(function(x){ return x.n === '乙'; });
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：空包给提示，不动库', (function(){
+    var bak = state.recipes.slice();
+    var before = state.recipes.length;
+    var r = mergePack([]);
+    var out = r.added === 0 && state.recipes.length === before;
+    state.recipes = bak; rebuildItems();
+    return out;
   })());
 
   chk('导出面板：说清几道菜、多大、给下载和复制两条路', (function(){
