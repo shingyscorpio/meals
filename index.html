@@ -161,6 +161,11 @@
   .arow:last-child{border-bottom:0}
   .arow>span{font-size:12.5px;color:#6E6A5F;flex:0 0 auto}
   .autohint{font-size:11.5px;color:#A9A398;margin:7px 2px 0;line-height:1.6}
+  .autoline{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    border:1px solid #EFEAE0;background:#FCFBF7;border-radius:13px;padding:9px 12px;margin:4px 0 0}
+  .autoval{font-size:13px;color:#3B372F}
+  .autoline .ghost{border:0;background:transparent;color:#3C6B4F;font-size:12.5px;
+    padding:2px 4px;font-family:inherit;cursor:pointer}
   .ingchip b{font-weight:400;color:rgba(255,255,255,.65);margin-left:5px}
   .ingchip.add{border-style:dashed;color:#3C6B4F;background:#fff}
   .padwrap{margin-top:8px}
@@ -304,7 +309,9 @@ var ING = {
   mantou:'全麦馒头', oats:'燕麦片', milk:'牛奶', beef:'牛里脊', chickenBreast:'鸡胸',
   chickenThigh:'鸡腿肉', pork:'猪里脊', porkMince:'猪肉末', tofuSoft:'嫩豆腐', tofuFirm:'老豆腐', nuts:'坚果',
   chia:'奇亚籽', cilantro:'香菜', passionFruit:'百香果', wonton:'小馄饨',
-  pancake:'手抓饼'
+  pancake:'手抓饼',
+  cabbage:'包菜', yuChoy:'油菜', eggplant:'茄子', enoki:'金针菇', nori:'海苔', shiitakeFresh:'香菇',
+  porkBelly:'五花肉', bacon:'培根'
 };
 
 /* ============================================================
@@ -354,13 +361,21 @@ var SHELF = {
   tofuSoft:{g:'豆制品',d:3,note:'开封后泡凉开水，3 天'},
   tofuFirm:{g:'豆制品',d:5,note:'冷藏 5 天'},
   /* 水果 */
-  passionFruit:{g:'水果',d:10,note:'常温 7 天，冷藏两周'}
+  passionFruit:{g:'水果',d:10,note:'常温 7 天，冷藏两周'},
+  /* 家常菜常用 */
+  cabbage:{g:'叶菜',d:10,note:'整颗冷藏两周，切开按 3 天'},
+  yuChoy:{g:'叶菜',d:3,fresh:1,note:'切口先黄，3 天内吃'},
+  eggplant:{g:'果菜',d:5,note:'表皮发皱、切开变褐就别吃'},
+  enoki:{g:'菌菇',d:5,note:'拆袋冷藏 5 天，出水发黏就扔'},
+  shiitakeFresh:{g:'菌菇',d:5,note:'纸袋冷藏 5 天，别用塑料袋闷'},
+  porkBelly:{g:'肉类',d:2,note:'冷藏 2 天，超了切小块冷冻'},
+  bacon:{g:'肉类',d:5,note:'未开封按包装日期；开封 3 天内用完'}
 };
 var GROUPS = ['叶菜','果菜','菌菇','根茎','肉类','豆制品','水果','自定义'];
 
 /* 常备品：不记库存，视为「家里总有」。采购清单和库存打分都不算它。 */
 var PANTRY = ['egg','yogurt','fruit','milk','mixedGrain','oats','bread','mantou','wonton',
-              'pancake','chickpea','nuts','chia','woodEar']; 
+              'pancake','chickpea','nuts','chia','woodEar','nori']; 
 
 /* 示例菜谱不再写死在代码里。它们被抽成同目录的 seed-recipes.json，
    在「设置 → 导入备份」里选这个文件导进来，就变成你自己的普通菜谱——
@@ -380,7 +395,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20 20:16';
+var BUILD = '2026-11-20 21:59';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -465,7 +480,8 @@ var SEASON_WORDS = ['盐','糖','白糖','冰糖','油','食用油','花生油',
   '花椒','干辣椒','辣椒面','辣椒粉','芝麻','香油','芝麻油','豆瓣酱','甜面酱','番茄酱','沙拉酱',
   '味精','鸡精','十三香','孜然','五香粉','八角','桂皮','香叶','蒜','大蒜','蒜末','蒜瓣','姜','姜末',
   '姜丝','姜片','姜蒜','葱','小葱','大葱','葱花','清水','水','高汤','柠檬汁','蜂蜜','辣椒油','花椒油',
-  '腐乳','豆豉','咖喱','咖喱块','咖喱粉','辣椒','小米辣','干辣椒段','泡椒','剁椒','蒜蓉','水淀粉'];
+  '腐乳','豆豉','咖喱','咖喱块','咖喱粉','辣椒','小米辣','干辣椒段','泡椒','剁椒','蒜蓉','水淀粉',
+  '葱白','葱蒜','蒜片','姜蒜','蒜头','味极鲜','蒸鱼豉油','美极鲜','植物油','玉米油','菜籽油','橄榄油','大豆油'];
 
 var ING_ALIAS = {
   '西红柿':'tomato','番茄':'tomato','鸡蛋':'egg','土鸡蛋':'egg','蛋':'egg','鸡蛋液':'egg',
@@ -478,10 +494,15 @@ var ING_ALIAS = {
   '生菜':'lettuce','茼蒿':'chrysanthemum','香菜':'cilantro','芫荽':'cilantro',
   '黄瓜':'cucumber','青瓜':'cucumber','青椒':'greenPepper','杭椒':'greenPepper','尖椒':'greenPepper',
   '西葫芦':'zucchini','秋葵':'okra','胡萝卜':'carrot','洋葱':'onion','西兰花':'broccoli',
-  '口蘑':'mushroom','蘑菇':'mushroom','香菇':'shiitake','干香菇':'shiitake','花菇':'shiitake','木耳':'woodEar',
+  '口蘑':'mushroom','蘑菇':'mushroom','香菇':'shiitakeFresh','鲜香菇':'shiitakeFresh','干香菇':'shiitake','花菇':'shiitake','木耳':'woodEar',
   '土豆':'potato','马铃薯':'potato','南瓜':'pumpkin','红薯':'sweetPotato','地瓜':'sweetPotato',
   '紫薯':'purpleSweetPotato','山药':'yam','玉米':'corn',
   '嫩豆腐':'tofuSoft','内酯豆腐':'tofuSoft','老豆腐':'tofuFirm','北豆腐':'tofuFirm','豆腐':'tofuFirm',
+  '包菜':'cabbage','卷心菜':'cabbage','圆白菜':'cabbage','洋白菜':'cabbage','甘蓝':'cabbage',
+  '油菜':'yuChoy','上海青':'yuChoy','小油菜':'yuChoy','青菜':'yuChoy',
+  '茄子':'eggplant','矮瓜':'eggplant','金针菇':'enoki','海苔':'nori','紫菜':'nori',
+  '五花肉':'porkBelly','五花':'porkBelly','带皮五花':'porkBelly','培根':'bacon',
+  '青红椒':'greenPepper','红椒':'greenPepper','菜椒':'greenPepper',
   '百香果':'passionFruit','燕麦':'oats','燕麦片':'oats','牛奶':'milk','全麦面包':'bread','面包':'bread',
   '馒头':'mantou','馄饨':'wonton','手抓饼':'pancake','鹰嘴豆':'chickpea','坚果':'nuts','奇亚籽':'chia'
 };
@@ -519,7 +540,7 @@ function matchIng(raw){
    原来的写法不锚定整行，只要句子里出现「片/把/只」或某个中文数字就算，
    于是「把鸡蛋打散，加一点盐」「小火煮两分钟」都被当成食材，
    而 matchIng 是子串匹配，句子里的「鸡蛋」还会被真的塞进用料表。 */
-var ING_UNIT = '个根颗瓣片勺把只条克斤块袋包盒瓶罐束张杯碗撮';
+var ING_UNIT = '个根颗瓣片勺把只条克斤块袋包盒瓶罐束张杯碗撮朵棵段头匙';
 function looksLikeIngredient(L){
   var s = String(L || '').trim();
   if(!s || s.length > 24) return false;
@@ -554,14 +575,39 @@ function stripStepNo(L){
 function guessCook(m){
   var t = String(m || '');
   var has = function(){ for(var i = 0; i < arguments.length; i++){ if(t.indexOf(arguments[i]) >= 0) return true; } return false; };
-  if(has('空气炸','烤箱','烤'))                     return {fire:'off',  vessel:'airfryer', wall:10, hand:3};
-  if(has('微波'))                                    return {fire:'off',  vessel:'microwave', wall:3,  hand:1};
-  if(has('蒸'))                                      return {fire:'none', vessel:'steamer',  wall:12, hand:3};
-  if(has('炖','焖','红烧','卤'))                      return {fire:'none', vessel:'pan',      wall:18, hand:5};
-  if(has('煮','汆','汤'))                            return {fire:'none', vessel:'water',    wall:12, hand:5};
-  if(has('焯','白灼') && !has('炒'))                  return {fire:'none', vessel:'water',    wall:6,  hand:4};
-  if(has('炒','爆','煸','煎','滑','炝'))              return {fire:'watch',vessel:'pan',      wall:9,  hand:8};
-  if(has('拌','腌','泡'))                            return {fire:'off',  vessel:'none',     wall:5,  hand:4};
+  if(has('空气炸','烤箱'))                            return {fire:'off',  vessel:'airfryer', wall:10, hand:3};
+  if(has('微波'))                                     return {fire:'off',  vessel:'microwave', wall:3,  hand:1};
+  /* 按「哪个动作出现得多」判主做法。原来取第一个命中的关键词，
+     「先蒸米饭」这一句就足以让一份拌饭整道判成蒸锅。
+     「蒸鱼豉油」是调料，先摘掉再数 */
+  var tt = t.replace(/蒸鱼豉油|蒸鱼|粉蒸肉的?调料/g, '');
+  var cnt = function(re){
+    var c = 0, x; while((x = re.exec(tt))) c++;
+    re.lastIndex = 0; return c;
+  };
+  var cRoast  = cnt(/烤/g);
+  var cSteam  = cnt(/蒸/g);
+  var cStew   = cnt(/炖|焖|红烧|卤/g);
+  var cFry    = cnt(/炒|爆|煸|煎|滑|炝/g);
+  var cBoil   = cnt(/煮|汆|汤/g);
+  var cBlanch = cnt(/焯|白灼/g);
+  var cMix    = cnt(/拌|腌|泡/g);
+  /* 炖煮类宁可放宽时间：判短了早上手忙脚乱，判长了只是少一个选项。
+     平手时炒/煎优先——中式家常菜的主做法八成是它 */
+  var best = 'fry', sc = cFry;
+  if(cStew * 2 > sc){ best = 'stew'; sc = cStew * 2; }
+  if(cRoast * 2 > sc){ best = 'roast'; sc = cRoast * 2; }
+  if(cSteam > sc){ best = 'steam'; sc = cSteam; }
+  if(cBoil > sc){ best = 'boil'; sc = cBoil; }
+  if(cBlanch > sc){ best = 'blanch'; sc = cBlanch; }
+  if(cMix > sc){ best = 'mix'; sc = cMix; }
+  if(best === 'roast')  return {fire:'off',  vessel:'airfryer', wall:10, hand:3};
+  if(best === 'steam')  return {fire:'none', vessel:'steamer',  wall:12, hand:3};
+  if(best === 'stew')   return {fire:'none', vessel:'pan',      wall:18, hand:5};
+  if(best === 'boil')   return {fire:'none', vessel:'water',    wall:12, hand:5};
+  if(best === 'blanch') return {fire:'none', vessel:'water',    wall:6,  hand:4};
+  if(best === 'mix')    return {fire:'off',  vessel:'none',     wall:5,  hand:4};
+  if(best === 'fry')    return {fire:'watch',vessel:'pan',      wall:9,  hand:8};
   return {fire:'none', vessel:'pan', wall:8, hand:6};
 }
 
@@ -963,9 +1009,23 @@ function inferRecipe(d){
     var nm = d.n || '';
     /* 菜名里的「鸡/鱼/肉」要放在「有任意食材就判纤维」之前：
        否则「香菇滑鸡」只要认出一个香菇，就被判成纤维，永远进不了蛋白格 */
-    if(has(PROTEIN_IDS) || /肉|蛋|鱼|虾|鸡|牛|猪|豆腐|奶/.test(nm)) d.cat = 'protein';
-    else if(has(CARB_IDS) || /土豆|红薯|南瓜|玉米|山药|面|饭|馒头|粥|包/.test(nm)) d.cat = 'carb';
-    else if(ing.length) d.cat = 'fiber';
+    /* 顺序：菜名里的肉 > 菜名里的碳水 > 菜名里的菜 > 用料里的蛋白 > 用料里的碳水。
+       菜名是主角，配料里的肉不改变这道菜是什么——手撕包菜放 50 克五花肉还是纤维菜 */
+    var MEAT_NM = /肉|蛋|鱼|虾|鸡|牛|猪|鸭|羊|排骨|火腿|腊肠|香肠|肉丸/;
+    var CARB_NM = /土豆|红薯|紫薯|南瓜|玉米|山药|面|饭|粥|馒头|包子|花卷|吐司|面包|饼|米粉|粉丝|年糕/;
+    var VEG_NM  = /菜|菇|茄|瓜|萝卜|豆腐|西兰花|木耳|秋葵|茼蒿|番茄|西红柿|豆角|芽|笋|莲藕/;
+    if(nm){
+      if(MEAT_NM.test(nm)) d.cat = 'protein';
+      else if(CARB_NM.test(nm)) d.cat = 'carb';
+      else if(VEG_NM.test(nm)) d.cat = 'fiber';
+      else if(has(PROTEIN_IDS)) d.cat = 'protein';
+      else if(has(CARB_IDS)) d.cat = 'carb';
+      else if(ing.length) d.cat = 'fiber';
+    } else {
+      if(has(PROTEIN_IDS)) d.cat = 'protein';
+      else if(has(CARB_IDS)) d.cat = 'carb';
+      else if(ing.length) d.cat = 'fiber';
+    }
   }
   if(a.time || a.fire || a.vessel){
     var g = guessCook(txt);
@@ -1039,13 +1099,24 @@ function sheetRecipe(){
   /* ② 菜名：唯一必须打字的一格 */
   h += fld('菜名', 'f_n', d.n, '');
 
-  /* ③ 三行自动判断，全部预选好，点一下就能改 */
-  h += '<div class="autostrip">';
-  h += arow('放哪一格', 'dcat', [['protein','蛋白'],['fiber','纤维'],['carb','碳水']], d.cat);
-  h += arow('早上要多久', 'dtime', TIME_OPTS, timeKey(d));
-  h += arow('要守着锅吗', 'dfire', [['watch','要盯锅'],['none','不用看'],['off','不开火']], d.fire);
-  h += '</div>';
-  if(autoLeft(d)) h += '<div class="autohint">这三行是按做法猜的，不对就点一下改。</div>';
+  /* ③ 自动判断：默认收成一行字。三行按钮全摊在那儿，人会以为「必须选」——
+     其实粘贴那一刻就算好了。要看细节、要改，点「不对，改」才展开 */
+  var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
+  var FIREN = {watch:'要盯锅', none:'不用看火', off:'不开火'};
+  var TIMEN = {q:'5 分钟', m:'10 分钟', l:'20 分钟'};
+  if(ui.autoOpen){
+    h += '<div class="autostrip">';
+    h += arow('放哪一格', 'dcat', [['protein','蛋白'],['fiber','纤维'],['carb','碳水']], d.cat);
+    h += arow('早上要多久', 'dtime', TIME_OPTS, timeKey(d));
+    h += arow('要守着锅吗', 'dfire', [['watch','要盯锅'],['none','不用看'],['off','不开火']], d.fire);
+    h += '</div>';
+    h += '<div style="text-align:right;margin-top:2px">' +
+         '<button class="linkbtn" data-act="dauto">收起</button></div>';
+  } else {
+    h += '<div class="autoline"><span class="autoval">' +
+         CATN[d.cat] + ' · ' + TIMEN[timeKey(d)] + ' · ' + FIREN[d.fire] +
+         '</span><button class="ghost" data-act="dauto">不对，改</button></div>';
+  }
 
   /* ④ 用料：只显示已选的，要加才展开 */
   h += '<div class="field"><span>用料' + (d.needs.length ? ' · ' + d.needs.length + ' 样' : ' · 还没填') + '</span>';
@@ -1206,6 +1277,7 @@ function openEditor(it){
   ui.impInfo = '';   /* 手点进来编辑的，不要显示上一次导入的识别摘要 */
   ui.pendFrom = '';  /* 也不是从待补录进来的 */
   ui.ingQ = '';
+  ui.autoOpen = false;   /* 每次进来先给摘要，别一上来就三行按钮 */
   renderSheet();
 }
 
@@ -2885,6 +2957,7 @@ document.addEventListener('click', function(e){
   else if(act === 'pasteParse'){ doPasteParse(); }
   else if(act === 'dPasteOpen'){ readForm(); ui.draft._pasteOpen = 1; renderSheet(); }
   else if(act === 'nmAdd'){ doAddByName(); }
+  else if(act === 'dauto'){ readForm(); ui.autoOpen = !ui.autoOpen; renderSheet(); }
   else if(act === 'dcat'){ readForm(); ui.draft.cat = el.dataset.v; ui.draft._auto.cat = 0; renderSheet(); }
   else if(act === 'dtime'){
     readForm();
@@ -3327,12 +3400,16 @@ if(location.search.indexOf('test') >= 0){
   chk('没有一样是统一默认值', shelfIds.every(function(id){ return SHELF[id].d >= 1 && SHELF[id].d <= 90; }),
       shelfIds.map(function(id){ return ingName(id) + SHELF[id].d; }).join(' '));
   chk('每样都写了储存条件', shelfIds.every(function(id){ return !!shelfNote(id); }));
-  chk('叶菜都在 7 天内', shelfIds.filter(function(id){ return SHELF[id].g === '叶菜'; })
-      .every(function(id){ return SHELF[id].d <= 7; }));
+  /* 结球类例外：整颗包菜冷藏两周是常识，不是把标准放宽 */
+  var LEAF_LONG = {cabbage:1};
+  chk('叶菜都在 7 天内（整颗包菜两周）', shelfIds.filter(function(id){ return SHELF[id].g === '叶菜'; })
+      .every(function(id){ return SHELF[id].d <= 7 || LEAF_LONG[id]; }));
   chk('根茎给足 3 周以上（玉米除外）', ['potato','sweetPotato','purpleSweetPotato','yam']
       .every(function(id){ return SHELF[id].d >= 21; }));
-  chk('肉只给 2 天', shelfIds.filter(function(id){ return SHELF[id].g === '肉类'; })
-      .every(function(id){ return SHELF[id].d === 2; }));
+  /* 培根是加工肉，未开封按包装日期算 */
+  var MEAT_LONG = {bacon:1};
+  chk('肉只给 2 天（培根按包装）', shelfIds.filter(function(id){ return SHELF[id].g === '肉类'; })
+      .every(function(id){ return SHELF[id].d === 2 || MEAT_LONG[id]; }));
   chk('没改过时用推荐值', shelfDays('tomato') === SHELF.tomato.d);
 
   invAdd('beef', 1);
@@ -3755,15 +3832,24 @@ if(location.search.indexOf('test') >= 0){
     return v.indexOf('＋ 加一道菜') >= 0 && v.indexOf('导入 / 补录') < 0;
   })());
 
-  chk('编辑器：只有菜名要打字，分类/时间/盯锅都预选好', (function(){
+  chk('编辑器：只有菜名要打字，判断收成一行字', (function(){
     ui.draft = emptyDraft('protein'); ui.draft._pasteOpen = 1; ui.impInfo = ''; ui.pendFrom = '';
+    ui.autoOpen = false;
     var sh = sheetRecipe();
+    /* 三行按钮默认不出现——摊在那儿人会以为必须挨个选 */
     return sh.indexOf('id="f_n"') >= 0 && sh.indexOf('id="f_paste"') >= 0 &&
-           sh.indexOf('data-act="dcat"') >= 0 && sh.indexOf('data-act="dtime"') >= 0 &&
-           sh.indexOf('data-act="dfire"') >= 0 &&
+           sh.indexOf('data-act="dauto"') >= 0 &&
+           sh.indexOf('data-act="dcat"') < 0 &&
            sh.indexOf('难度') < 0 && sh.indexOf('菜系') < 0 &&
            sh.indexOf('口味') < 0 && sh.indexOf('红肉') < 0 &&
            sh.indexOf('自带的纤维') < 0;
+  })());
+  chk('判断错了点「改」三项都能改', (function(){
+    ui.autoOpen = true;
+    var sh = sheetRecipe();
+    ui.autoOpen = false;
+    return sh.indexOf('data-act="dcat"') >= 0 && sh.indexOf('data-act="dtime"') >= 0 &&
+           sh.indexOf('data-act="dfire"') >= 0;
   })());
 
   chk('编辑器：链接/作者/备料都折在「更多」里', (function(){
