@@ -380,7 +380,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20 17:48';
+var BUILD = '2026-11-20 20:16';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -3029,10 +3029,10 @@ document.addEventListener('click', function(e){
 
   /* 设置 */
   else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; renderSheet(); }
-  else if(act === 'bkOpen'){ ui.bkText = backupText(); ui.bkMsg = null; ui.sheetType = 'backup'; renderSheet(); }
+  else if(act === 'bkOpen'){ ui.sheet = true; ui.bkText = backupText(); ui.bkMsg = null; ui.sheetType = 'backup'; renderSheet(); }
   else if(act === 'bkDownload'){ downloadBackup(); }
   else if(act === 'bkCopy'){ copyBackup(); }
-  else if(act === 'rsOpen'){ ui.sheetType = 'restore'; ui.rsTxt = ''; ui.rsInfo = null; ui.rsParsed = null; renderSheet(); }
+  else if(act === 'rsOpen'){ ui.sheet = true; ui.sheetType = 'restore'; ui.rsTxt = ''; ui.rsInfo = null; ui.rsParsed = null; renderSheet(); }
   else if(act === 'rsCheck'){ checkRestore(); }
   else if(act === 'rsApply'){ applyBackup(); }
   else if(act === 'closesheet'){ ui.sheet = false; renderKeep(); }
