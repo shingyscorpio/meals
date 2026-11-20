@@ -1,0 +1,1370 @@
+{
+ "__backup": 1,
+ "app": "今天这顿",
+ "at": "2026-11-20T09:26:26.285Z",
+ "v": 1,
+ "data": {
+  "version": 4,
+  "settings": {
+   "window": 15,
+   "yogurt": true,
+   "fruit": true
+  },
+  "inventory": [],
+  "history": [],
+  "recipes": [
+   {
+    "id": "p01",
+    "n": "水煮蛋",
+    "cat": "protein",
+    "hand": 0,
+    "wall": 9,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "egg",
+    "lv": "L2",
+    "needs": [
+     "egg"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "水开下锅 9 分钟，捞出过冷水。",
+    "prep": [
+     {
+      "min": 0,
+      "text": "水开时顺手多下 1–2 个，冷藏可放 3 天"
+     }
+    ]
+   },
+   {
+    "id": "p02",
+    "n": "微波蒸蛋",
+    "cat": "protein",
+    "hand": 2,
+    "wall": 2,
+    "fire": "off",
+    "vessel": "microwave",
+    "staple": "egg",
+    "lv": "—",
+    "needs": [
+     "egg"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "碗中加水，蛋打入，盖个盘子，中高火 90 秒。",
+    "prep": [],
+    "note": "是蛋羹不是水煮蛋，适合没烧开水的早上"
+   },
+   {
+    "id": "p03",
+    "n": "煎鸡胸",
+    "cat": "protein",
+    "hand": 7,
+    "wall": 7,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "chicken",
+    "lv": "L2",
+    "needs": [
+     "chickenBreast"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "西式",
+    "m": "冷锅冷油下锅，中火每面 3 分半，出锅静置 1 分钟再切。",
+    "prep": [
+     {
+      "min": 3,
+      "text": "鸡胸用盐、黑胡椒、橄榄油抓匀，装袋冷藏（可一次腌 4 块冷冻）",
+      "ph": "腌过夜 4°C"
+     }
+    ]
+   },
+   {
+    "id": "p04",
+    "n": "小炒牛肉",
+    "cat": "protein",
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "beef",
+    "red": true,
+    "lv": "L1",
+    "needs": [
+     "beef",
+     "cilantro"
+    ],
+    "taste": [
+     2,
+     0,
+     2
+    ],
+    "cuisine": "中式",
+    "m": "早上现上浆 5 分钟（淀粉+油封面）；热锅滑散变色捞出，炒香蒜辣，回锅下香菜。",
+    "prep": [
+     {
+      "min": 5,
+      "text": "牛里脊切片、香菜切段、蒜和泡椒切好",
+      "ph": "4°C，不腌"
+     },
+     {
+      "min": 5,
+      "text": "上浆不提前，早上现做",
+      "ph": "含淀粉，冷藏会脱浆",
+      "am": 1
+     }
+    ],
+    "note": "上浆是最贵的 5 分钟，省不掉"
+   },
+   {
+    "id": "p05",
+    "n": "泰式酸辣牛肉",
+    "cat": "protein",
+    "hand": 6,
+    "wall": 8,
+    "fire": "none",
+    "vessel": "pan",
+    "staple": "beef",
+    "red": true,
+    "lv": "L2",
+    "needs": [
+     "beef",
+     "cilantro",
+     "onion"
+    ],
+    "taste": [
+     2,
+     2,
+     2
+    ],
+    "cuisine": "泰式",
+    "m": "料底下锅烧开，牛肉片下锅小火煮 2 分钟，关火挤柠檬。",
+    "prep": [
+     {
+      "min": 6,
+      "text": "搅拌机打料一次打 3 份冷冻（省下洗机器的次数）",
+      "ph": "冷冻 1 月"
+     }
+    ]
+   },
+   {
+    "id": "p06",
+    "n": "番茄酸辣鸡块",
+    "cat": "protein",
+    "hand": 5,
+    "wall": 18,
+    "fire": "none",
+    "vessel": "pan",
+    "staple": "chicken",
+    "lv": "L2",
+    "needs": [
+     "chickenThigh",
+     "tomato",
+     "onion"
+    ],
+    "taste": [
+     2,
+     1,
+     2
+    ],
+    "cuisine": "中式",
+    "m": "鸡块煸香，下料头和番茄炒出汁，加两碗水小火炖 15 分钟（不用管）。",
+    "prep": [
+     {
+      "min": 5,
+      "text": "鸡腿肉切丁，盐+生抽+料酒+白胡椒腌过夜",
+      "ph": "4°C 过夜"
+     },
+     {
+      "min": 2,
+      "text": "洋葱切块（番茄早上现切，切了流汁）"
+     }
+    ]
+   },
+   {
+    "id": "p07",
+    "n": "杭椒牛柳",
+    "cat": "protein",
+    "hand": 10,
+    "wall": 10,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "beef",
+    "red": true,
+    "lv": "L1",
+    "needs": [
+     "beef",
+     "greenPepper"
+    ],
+    "taste": [
+     2,
+     0,
+     1
+    ],
+    "cuisine": "中式",
+    "m": "早上上浆 3 分钟；热锅凉油四成热滑散，炒青椒倒碗汁回锅。",
+    "prep": [
+     {
+      "min": 3,
+      "text": "牛柳切条、杭椒切段、碗汁装小瓶（蚝油+生抽+水+黑胡椒）",
+      "ph": "4°C，不腌"
+     }
+    ]
+   },
+   {
+    "id": "p08",
+    "n": "百香果酸汤牛肉",
+    "cat": "protein",
+    "hand": 6,
+    "wall": 12,
+    "fire": "none",
+    "vessel": "pan",
+    "staple": "beef",
+    "red": true,
+    "lv": "L3",
+    "needs": [
+     "beef",
+     "passionFruit",
+     "tomato",
+     "onion",
+     "cilantro"
+    ],
+    "taste": [
+     2,
+     2,
+     1
+    ],
+    "cuisine": "中式",
+    "m": "料底烧开，牛肉一片片下锅，盖盖煮 1 分半，撒香菜。",
+    "prep": [
+     {
+      "min": 8,
+      "text": "料底批量：姜蒜野山椒洋葱番茄+百香果炒香，分装冷藏 3 天",
+      "ph": "4°C 3 天 / 冷冻 1 月"
+     }
+    ]
+   },
+   {
+    "id": "p09",
+    "n": "洋葱炒肉",
+    "cat": "protein",
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "pork",
+    "red": true,
+    "lv": "L1",
+    "needs": [
+     "pork",
+     "onion"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "肉丝现上浆 3 分钟；爆香葱蒜炒肉丝，另炒洋葱，合并调味。",
+    "prep": [
+     {
+      "min": 4,
+      "text": "猪里脊切丝、洋葱切丝（不腌不浆）",
+      "ph": "4°C 1 天"
+     }
+    ]
+   },
+   {
+    "id": "p10",
+    "n": "鸡蛋抱豆腐",
+    "cat": "protein",
+    "hand": 6,
+    "wall": 6,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "tofu",
+    "lv": "L1",
+    "needs": [
+     "tofuSoft",
+     "egg"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "豆腐切块先煎两面，倒入蛋液，小火焖 2 分钟。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "豆腐切块装盒、蛋**不**提前打（打好会消泡）",
+      "ph": "豆腐取出即变质，早上再取"
+     }
+    ]
+   },
+   {
+    "id": "p11",
+    "n": "蒸豆腐饼",
+    "cat": "protein",
+    "hand": 2,
+    "wall": 10,
+    "fire": "none",
+    "vessel": "steamer",
+    "staple": "tofu",
+    "lv": "L2",
+    "needs": [
+     "tofuSoft",
+     "egg"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "饼坯装碟上蒸屉，水开蒸 10 分钟，淋一点生抽香油。",
+    "prep": [
+     {
+      "min": 6,
+      "text": "豆腐压碎+蛋+盐+少许淀粉拌匀，装盒冷藏（这道菜的全部工作量）",
+      "ph": "4°C 24h"
+     }
+    ]
+   },
+   {
+    "id": "p12",
+    "n": "番茄豆腐",
+    "cat": "protein",
+    "hand": 5,
+    "wall": 5,
+    "fire": "none",
+    "vessel": "pan",
+    "staple": "tofu",
+    "lv": "L2",
+    "needs": [
+     "tofuSoft",
+     "tomato"
+    ],
+    "taste": [
+     1,
+     1,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "番茄炒出汁，下豆腐块轻推，收汁 2 分钟。",
+    "prep": [
+     {
+      "min": 3,
+      "text": "番茄料底可批量炒好分装冷冻",
+      "ph": "冷冻 1 月"
+     }
+    ]
+   },
+   {
+    "id": "p13",
+    "n": "青椒炒豆腐",
+    "cat": "protein",
+    "fiber": 1,
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "tofu",
+    "lv": "L1",
+    "needs": [
+     "tofuFirm",
+     "greenPepper"
+    ],
+    "taste": [
+     1,
+     0,
+     1
+    ],
+    "cuisine": "中式",
+    "m": "老豆腐切片煎黄，下青椒块，生抽+一点水翻炒收汁。",
+    "prep": [
+     {
+      "min": 3,
+      "text": "老豆腐切片、青椒撕块（豆腐吃前再取）",
+      "ph": "4°C 1 天"
+     }
+    ],
+    "note": "这道自带纤维，纤维格可以留给水果"
+   },
+   {
+    "id": "f01",
+    "n": "奇亚籽",
+    "cat": "fiber",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "none",
+    "staple": "chia",
+    "lv": "L3",
+    "needs": [
+     "chia"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "轻食",
+    "m": "从冰箱取出，两勺拌进酸奶。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "奇亚籽加水泡好冷藏（泡发后 3 天内稳定）",
+      "ph": "4°C 3 天"
+     }
+    ]
+   },
+   {
+    "id": "f02",
+    "n": "凉拌菠菜",
+    "cat": "fiber",
+    "hand": 1,
+    "wall": 2,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "spinach",
+    "lv": "L1",
+    "needs": [
+     "spinach"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "水开焯 40 秒，捞出挤干水分切段，淋料汁。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "菠菜去根去烂叶装袋——**只择不洗**",
+      "ph": "早上进洗碗机"
+     },
+     {
+      "min": 2,
+      "text": "料汁调好单独装碗（生抽+蚝油+盐糖+泼油）",
+      "ph": "4°C 3 天"
+     }
+    ]
+   },
+   {
+    "id": "f03",
+    "n": "口蘑拌菠菜",
+    "cat": "fiber",
+    "hand": 2,
+    "wall": 2,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "mushroom",
+    "lv": "L2",
+    "needs": [
+     "mushroom",
+     "spinach"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "菠菜焯 40 秒；昨晚的口蘑切片，一起拌。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "菠菜择好",
+      "ph": "只择不洗"
+     },
+     {
+      "min": 8,
+      "text": "口蘑不切，盐水煮 8 分钟，沥干冷藏",
+      "ph": "4°C 24h"
+     }
+    ]
+   },
+   {
+    "id": "f04",
+    "n": "芥末凉拌秋葵",
+    "cat": "fiber",
+    "hand": 2,
+    "wall": 4,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "okra",
+    "lv": "L1",
+    "needs": [
+     "okra"
+    ],
+    "taste": [
+     1,
+     1,
+     1
+    ],
+    "cuisine": "日式",
+    "m": "水开加盐油煮 2 分钟，泡冰水，对半切，淋芥末汁。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "秋葵洗好擦干，**不去蒂不切**",
+      "ph": "4°C 1 天，去蒂就漏黏液"
+     }
+    ]
+   },
+   {
+    "id": "f05",
+    "n": "凉拌空心菜",
+    "cat": "fiber",
+    "hand": 1,
+    "wall": 2,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "waterSpinach",
+    "lv": "L1",
+    "needs": [
+     "waterSpinach"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "水开焯 40 秒，捞出过凉，淋蒜辣汁。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "去老梗装袋——只择不洗",
+      "ph": "4°C 1 天"
+     }
+    ]
+   },
+   {
+    "id": "f06",
+    "n": "沙拉（生菜+坚果+蛋+莓果）",
+    "cat": "fiber",
+    "hand": 2,
+    "wall": 2,
+    "fire": "off",
+    "vessel": "none",
+    "staple": "lettuce",
+    "lv": "L1",
+    "needs": [
+     "lettuce",
+     "nuts",
+     "fruit"
+    ],
+    "taste": [
+     0,
+     1,
+     0
+    ],
+    "cuisine": "轻食",
+    "m": "生菜洗后彻底甩干，加油醋汁、坚果、蓝莓苹果。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "生菜只择不洗；油醋汁一次调好存一周；坚果分装",
+      "ph": "汁 4°C 7 天"
+     }
+    ],
+    "note": "加蛋加坚果后它已接近一餐"
+   },
+   {
+    "id": "f07",
+    "n": "黄瓜",
+    "cat": "fiber",
+    "hand": 0,
+    "wall": 1,
+    "fire": "off",
+    "vessel": "none",
+    "staple": "cucumber",
+    "lv": "L0",
+    "needs": [
+     "cucumber"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "早上洗，拍裂切段，撒盐和一点醋。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "洗好即可，**不切**",
+      "ph": "切后 30 分钟开始渗水"
+     }
+    ]
+   },
+   {
+    "id": "f08",
+    "n": "炒胡萝卜",
+    "cat": "fiber",
+    "hand": 6,
+    "wall": 6,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "carrot",
+    "lv": "L2",
+    "needs": [
+     "carrot"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "胡萝卜丝下锅炒软，盐+少许生抽。",
+    "prep": [
+     {
+      "min": 3,
+      "text": "胡萝卜切丝冷藏",
+      "ph": "4°C 2 天"
+     }
+    ]
+   },
+   {
+    "id": "f09",
+    "n": "西葫芦炒番茄",
+    "cat": "fiber",
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "zucchini",
+    "lv": "L1",
+    "needs": [
+     "zucchini",
+     "tomato"
+    ],
+    "taste": [
+     1,
+     1,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "番茄先炒出汁，下西葫芦片大火 2 分钟，别久炒。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "洗好，**都不切**（西葫芦含水 95%，切了出水）",
+      "ph": "4°C 2 天"
+     }
+    ]
+   },
+   {
+    "id": "f10",
+    "n": "凉拌西葫芦",
+    "cat": "fiber",
+    "hand": 2,
+    "wall": 2,
+    "fire": "off",
+    "vessel": "none",
+    "staple": "zucchini",
+    "lv": "L1",
+    "needs": [
+     "zucchini"
+    ],
+    "taste": [
+     1,
+     1,
+     1
+    ],
+    "cuisine": "中式",
+    "m": "西葫芦现擦丝，拌料汁（红油+花椒油+香油+醋）。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "只调料汁；擦丝必须现擦",
+      "ph": "擦后 10 分钟出水"
+     }
+    ]
+   },
+   {
+    "id": "f11",
+    "n": "虎皮青椒",
+    "cat": "fiber",
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "greenPepper",
+    "lv": "L2",
+    "needs": [
+     "greenPepper"
+    ],
+    "taste": [
+     2,
+     1,
+     2
+    ],
+    "cuisine": "中式",
+    "m": "不放油烙出皱纹，加油煸蒜末，倒料汁翻匀。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "料汁提前调（生抽 10ml+醋 15ml+盐糖）",
+      "ph": "4°C 3 天"
+     }
+    ],
+    "note": "空气炸锅 200°C 8 分钟可免看火"
+   },
+   {
+    "id": "f12",
+    "n": "番茄炒青椒",
+    "cat": "fiber",
+    "hand": 6,
+    "wall": 6,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "tomato",
+    "lv": "L1",
+    "needs": [
+     "tomato",
+     "greenPepper"
+    ],
+    "taste": [
+     1,
+     1,
+     1
+    ],
+    "cuisine": "中式",
+    "m": "青椒先煸软，下番茄炒出汁，盐糖调味。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "青椒可切；番茄现切",
+      "ph": "番茄切后流汁"
+     }
+    ]
+   },
+   {
+    "id": "f13",
+    "n": "白灼菜心",
+    "cat": "fiber",
+    "hand": 1,
+    "wall": 1,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "choySum",
+    "lv": "L2",
+    "needs": [
+     "choySum"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "水开加油盐，根部先烫 30 秒再全下 1 分钟，淋碗汁。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "菜心去老根装袋；蒜末+碗汁（生抽+蚝油+清水）",
+      "ph": "碗汁 4°C 3 天"
+     }
+    ]
+   },
+   {
+    "id": "f14",
+    "n": "蒜蓉西兰花",
+    "cat": "fiber",
+    "hand": 3,
+    "wall": 4,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "broccoli",
+    "lv": "L1",
+    "needs": [
+     "broccoli"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "水开焯 2 分钟，捞出淋蒜蓉汁。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "掰小朵装袋**不洗**；蒜末切好",
+      "ph": "洗后一夜发黄出水"
+     }
+    ]
+   },
+   {
+    "id": "f15",
+    "n": "西兰花素炒",
+    "cat": "fiber",
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "broccoli",
+    "lv": "L2",
+    "needs": [
+     "broccoli",
+     "woodEar",
+     "carrot",
+     "egg"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "木耳胡萝卜先炒，下西兰花和炒蛋，盐+一点蚝油。",
+    "prep": [
+     {
+      "min": 4,
+      "text": "木耳泡发、胡萝卜切片、西兰花掰朵不洗",
+      "ph": "4°C 1 天"
+     }
+    ],
+    "note": "一菜同时给纤维和蛋白"
+   },
+   {
+    "id": "f16",
+    "n": "空气炸锅烤蔬菜",
+    "cat": "fiber",
+    "hand": 2,
+    "wall": 20,
+    "fire": "off",
+    "vessel": "airfryer",
+    "staple": "mixedVeg",
+    "lv": "L3",
+    "needs": [
+     "potato",
+     "pumpkin",
+     "broccoli",
+     "mushroom",
+     "onion"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "西式",
+    "m": "洗漱前把袋子倒进炸锅，200°C 20 分钟，回来正好。",
+    "prep": [
+     {
+      "min": 8,
+      "text": "切块拌橄榄油+海盐装袋（根茎洗完必须擦干）",
+      "ph": "4°C 2 天"
+     }
+    ],
+    "note": "一锅出 2–3 天的纤维量，早上只分装"
+   },
+   {
+    "id": "f17",
+    "n": "茼蒿拌豆腐",
+    "cat": "fiber",
+    "hand": 3,
+    "wall": 3,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "chrysanthemum",
+    "lv": "L1",
+    "needs": [
+     "chrysanthemum",
+     "tofuFirm"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "茼蒿焯 20 秒切段，和豆腐碎拌，淋香油生抽。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "茼蒿只择不洗；豆腐吃前才从盒里取",
+      "ph": "豆腐取出即变质"
+     }
+    ]
+   },
+   {
+    "id": "c01",
+    "n": "鹰嘴豆",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "chickpea",
+    "lv": "L3",
+    "needs": [
+     "chickpea"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "轻食",
+    "m": "从冷冻取一份，微波 1 分钟。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "干豆冰箱冷藏泡 8–12 小时（不要室温泡），煮好分装",
+      "ph": "冷藏 4 天 / 冷冻 1 月"
+     }
+    ],
+    "note": "蛋白+碳水双料"
+   },
+   {
+    "id": "c02",
+    "n": "红薯",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "sweetPotato",
+    "lv": "L3",
+    "needs": [
+     "sweetPotato"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "昨晚电压力锅蒸好，取出即可。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "整颗放电压力锅蒸屉，预约（干蒸，不碰水）",
+      "ph": "冷藏 3 天"
+     }
+    ]
+   },
+   {
+    "id": "c03",
+    "n": "山药",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "yam",
+    "lv": "L1",
+    "needs": [
+     "yam"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "整根蒸好，早上切段。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "整根带皮蒸，预约",
+      "ph": "切开会发黑"
+     }
+    ]
+   },
+   {
+    "id": "c04",
+    "n": "紫薯",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "purpleSweetPotato",
+    "lv": "L3",
+    "needs": [
+     "purpleSweetPotato"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "昨晚蒸好，取出即可。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "放电压力锅蒸屉预约",
+      "ph": "冷藏 3 天"
+     }
+    ]
+   },
+   {
+    "id": "c05",
+    "n": "南瓜",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "pumpkin",
+    "lv": "L2",
+    "needs": [
+     "pumpkin"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "昨晚蒸好，取出即可。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "切块装盒（切面干燥，耐放）",
+      "ph": "4°C 2 天"
+     }
+    ]
+   },
+   {
+    "id": "c06",
+    "n": "土豆",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "potato",
+    "lv": "L1",
+    "needs": [
+     "potato"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "整颗蒸好，早上剥皮。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "整颗，切开必须泡水且不超 4 小时",
+      "ph": "多酚氧化酶遇氧发黑"
+     }
+    ]
+   },
+   {
+    "id": "c07",
+    "n": "玉米",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 0,
+    "fire": "off",
+    "vessel": "pre",
+    "staple": "corn",
+    "lv": "L3",
+    "needs": [
+     "corn"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "昨晚蒸好或现取，微波 1 分钟。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "放电压力锅蒸屉预约",
+      "ph": "冷藏 3 天"
+     }
+    ]
+   },
+   {
+    "id": "c08",
+    "n": "全麦面包",
+    "cat": "carb",
+    "hand": 2,
+    "wall": 3,
+    "fire": "off",
+    "vessel": "airfryer",
+    "staple": "bread",
+    "lv": "L3",
+    "needs": [
+     "bread"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "西式",
+    "m": "冷冻直接进空气炸锅 180°C 3 分钟。",
+    "prep": [
+     {
+      "min": 0,
+      "text": "周末烤好切片**冷冻**（不冷藏）",
+      "ph": "4°C 是淀粉老化最快的温度区"
+     }
+    ]
+   },
+   {
+    "id": "c09",
+    "n": "全麦馒头",
+    "cat": "carb",
+    "hand": 2,
+    "wall": 2,
+    "fire": "off",
+    "vessel": "microwave",
+    "staple": "mantou",
+    "lv": "L3",
+    "cap": 0.5,
+    "needs": [
+     "mantou"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "洒水或盖湿厨房纸，微波 90 秒。",
+    "prep": [],
+    "note": "你不爱吃，频率已压到两周 ≤1 次"
+   },
+   {
+    "id": "c10",
+    "n": "燕麦牛奶",
+    "cat": "carb",
+    "hand": 2,
+    "wall": 2,
+    "fire": "off",
+    "vessel": "microwave",
+    "staple": "oats",
+    "lv": "L2",
+    "needs": [
+     "oats",
+     "milk"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "西式",
+    "m": "微波 90 秒，搅一次，再 30 秒。",
+    "prep": [
+     {
+      "min": 2,
+      "text": "燕麦+牛奶 1:1.2 冷藏浸泡",
+      "ph": "4°C 一夜"
+     }
+    ],
+    "note": "传统压片，GI 约 55–60，比即食款低 20 点"
+   },
+   {
+    "id": "c11",
+    "n": "水果（蓝莓/苹果）",
+    "cat": "carb",
+    "hand": 0,
+    "wall": 1,
+    "fire": "off",
+    "vessel": "none",
+    "staple": "fruit",
+    "lv": "L1",
+    "needs": [
+     "fruit"
+    ],
+    "taste": [
+     0,
+     1,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "洗好切块，配酸奶。",
+    "prep": [
+     {
+      "min": 1,
+      "text": "整颗带到早上切；莓类洗好冷藏 2 天",
+      "ph": "切开的苹果会褐变"
+     }
+    ]
+   },
+   {
+    "id": "c12",
+    "n": "杂粮饭",
+    "cat": "carb",
+    "hand": 1,
+    "wall": 2,
+    "fire": "off",
+    "vessel": "microwave",
+    "staple": "mixedGrain",
+    "lv": "L3",
+    "needs": [
+     "mixedGrain"
+    ],
+    "taste": [
+     0,
+     0,
+     0
+    ],
+    "cuisine": "通用",
+    "m": "冷冻取一份，微波 2 分钟。",
+    "prep": [
+     {
+      "min": 0,
+      "text": "周末一次煮 4 份趁热分装冷冻",
+      "ph": "-18°C 1 月，比冷藏口感好"
+     }
+    ]
+   },
+   {
+    "id": "c13",
+    "n": "速冻小馄饨",
+    "cat": "carb",
+    "hand": 5,
+    "wall": 5,
+    "fire": "none",
+    "vessel": "water",
+    "staple": "wonton",
+    "lv": "L3",
+    "cap": 1,
+    "needs": [
+     "wonton"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "水开下锅煮 5 分钟，同锅丢一把青菜。",
+    "prep": [],
+    "note": "纤维为 0，必须配一份青菜；钠高，一周 ≤1 次"
+   },
+   {
+    "id": "c14",
+    "n": "手抓饼",
+    "cat": "carb",
+    "hand": 4,
+    "wall": 5,
+    "fire": "off",
+    "vessel": "airfryer",
+    "staple": "pancake",
+    "lv": "L3",
+    "cap": 0.5,
+    "needs": [
+     "pancake"
+    ],
+    "taste": [
+     1,
+     0,
+     0
+    ],
+    "cuisine": "中式",
+    "m": "空气炸锅 200°C 5 分钟，加个蛋和生菜。",
+    "prep": [],
+    "note": "脂肪 15–20g、蛋白仅 6g，两周 ≤1 次"
+   },
+   {
+    "id": "x001",
+    "ext": 1,
+    "n": "番茄炒蛋",
+    "cat": "protein",
+    "hand": 8,
+    "wall": 8,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "egg",
+    "lv": "L1",
+    "needs": [
+     "tomato",
+     "egg"
+    ],
+    "taste": [
+     1,
+     0,
+     1
+    ],
+    "cuisine": "中式",
+    "src": "https://www.xiachufang.com/recipe/107545188/",
+    "m": "番茄切小块，鸡蛋加一点盐打散；热油倒蛋液炒成嫩块盛出；补油下番茄，中小火压出汁；倒回鸡蛋，加盐翻匀出锅。",
+    "prep": [],
+    "note": "番茄切了出水、蛋液冷藏直打不蓬松，都留到早上；比番茄豆腐多 3 分钟，鸡蛋七成熟就要盛出"
+   },
+   {
+    "id": "x002",
+    "ext": 1,
+    "n": "肉末嫩豆腐",
+    "cat": "protein",
+    "hand": 8,
+    "wall": 14,
+    "fire": "watch",
+    "vessel": "pan",
+    "staple": "tofu",
+    "red": true,
+    "lv": "L1",
+    "needs": [
+     "tofuSoft",
+     "porkMince",
+     "shiitake"
+    ],
+    "taste": [
+     1,
+     0,
+     1
+    ],
+    "cuisine": "中式",
+    "src": "https://www.xiachufang.com/recipe/104697207/",
+    "author": "小何的减脂日常",
+    "m": "香菇提前泡软切丁，**香菇水留着**；肉末加香菇丁、蒜末、少许盐和酱油抓匀。\n热锅少油，肉末煸到变色出香，下蒜末和小米辣翻两下，倒半碗香菇水烧开。\n嫩豆腐切 2cm 方块，轻推进锅，加酱油和白胡椒粉，倒水淀粉，中火不盖盖收 2–3 分钟。\n汤汁别收干，留一点拌饭，撒葱花出锅。",
+    "prep": [
+     {
+      "min": 0,
+      "text": "**前一晚**把干香菇泡上，连香菇水一起冷藏；肉末也先拌好",
+      "ph": "冷藏 1 天，香菇水别倒"
+     }
+    ],
+    "note": "豆腐下锅后只能推、不能翻，一翻就碎；水淀粉倒之前再搅一下，沉底就勾不匀；肉末 80 克够了，减脂版靠香菇水提鲜不靠油"
+   }
+  ],
+  "edits": {},
+  "hidden": [],
+  "extraIng": {},
+  "pending": [],
+  "shelf": {},
+  "shelfName": {},
+  "today": {
+   "date": "",
+   "skipped": [],
+   "locks": {},
+   "pick": null,
+   "eaten": null,
+   "consumed": null
+  }
+ }
+}
