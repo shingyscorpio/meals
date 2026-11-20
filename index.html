@@ -369,7 +369,7 @@ var PANTRY = ['egg','yogurt','fruit','milk','mixedGrain','oats','bread','mantou'
    留个空壳，老代码路径不会引用到未定义变量。 */
 var BUILTIN = [];
 
-var ITEMS = [];   /* 运行时生效的池子：由 rebuildItems() 用内置 + 自建 − 删掉 重新填 */
+var ITEMS = [];   /* 运行时生效的池子：由 rebuildItems() 用你自己存的菜谱 − 删掉的 重新填 */
 
 var FIRE = {watch:'要盯锅', none:'不用看火', off:'不开火'};
 var DEVN = {microwave:'微波', airfryer:'空气炸锅', water:'水锅', pan:'炒锅', steamer:'蒸屉', pre:'昨晚已做', none:'免火'};
@@ -380,7 +380,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20 17:36';
+var BUILD = '2026-11-20 17:42';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -402,7 +402,7 @@ var state = load();
 /* 保质期覆盖表：老数据没这两个字段，补上。所有读保质期的地方都走 shelfDays() */
 state.shelf = state.shelf || {};
 state.shelfName = state.shelfName || {};
-/* 菜谱：自己加的 / 改过的内置 / 删掉的 / 编辑时新起的食材名 */
+/* 菜谱：全部由你自己创建；hidden 记删掉的，extraIng 记编辑时新起的食材名 */
 state.recipes = state.recipes || [];
 state.edits = state.edits || {};
 state.hidden = state.hidden || [];
@@ -979,7 +979,7 @@ function inferRecipe(d){
   /* 口味顺序按 schema：[浓淡, 酸, 辣]，每项 0–2。
      原来写成 [酸, 辣, 浓] 且只给 0/1 —— tastePenalty 用 taste[1]>=2 判酸、taste[2]>=2 判辣，
      顺序和阈值同时错位，「双酸/双辣」对自建菜永远不成立。
-     另外不能无条件重算：内置菜谱的口味是人工标的，改一个用料就冲掉就白标了。 */
+     另外不能无条件重算：菜谱里的口味是录入时标的，改一个用料就冲掉，等于白标了。 */
   if(!(d.taste || []).some(function(x){ return x; })){
     d.taste = [
       /红烧|浓|酱|卤|炖/.test(txt) ? 2 : 0,
@@ -1482,10 +1482,10 @@ function rebuildItems(){
 /* 以前用来区分「代码自带」和「自己建的」。现在只有自己建的，
    留着空实现是因为老数据的 hidden / edits 里还带 p01… 这类 id */
 function isBuiltin(id){ return false; }
-/* 食材显示名：内置表 > 编辑器里新起的名字 > 原样返回 */
+/* 食材显示名：食材表 > 编辑器里新起的名字 > 原样返回 */
 function ingName(id){ return (id && (ING[id] || state.extraIng[id])) || id || ''; }
 
-/* 存一条：id 为空即新建。内置的只记一份覆盖 patch，原始数据不动 */
+/* 存一条：id 为空即新建；同 id 就是整条替换 */
 function saveRecipe(d){
   /* 新建的草稿 id 是空串。不补的话，第二道会命中「id 也是空串」的第一道，直接把它覆盖掉。
      原来只有测试代码在补 id，生产路径没补——连存两道自建菜，库里只会剩最后一道。 */
@@ -1526,9 +1526,8 @@ function deleteRecipe(id){
   var same = ITEMS.filter(function(x){ return x.cat === it.cat; });
   if(same.length <= 3) return '这类只剩 ' + same.length + ' 道，再删就排不出今天这顿了';
   if(state.hidden.indexOf(id) < 0) state.hidden.push(id);
-  /* 内置的修改存在 state.edits 里，删掉它恢复后就变成「恢复出厂」；
-     自建菜谱的修改在 state.recipes 里，hidden 不影响它。两条路径行为要一致：只藏，不动改动 */
-  /* 自建的不从 recipes 里真删，只是藏起来，这样「恢复」还能拿回来 */
+  /* 删除只藏不删：id 记进 hidden，条目还留在 recipes 里，
+     这样「恢复」能原样拿回来，也不至于手滑一次就没了 */
   dropPickIfTouched(id);
   rebuildItems(); save();
   return null;
@@ -2476,7 +2475,7 @@ function sheetSettings(){
        '<span style="font-size:12.5px;color:#8A8478">' +
        (used < 1024 ? '不到 1 KB' : (used / 1024).toFixed(0) + ' KB') + ' / 约 5 MB</span></div>';
   h += '<div style="font-size:12px;color:#A9A398;line-height:1.7;margin-top:4px">' +
-       '只算你自己加的菜、改过的、库存和这阵子的记录；内置菜谱在程序里，不占这份。' +
+       '菜谱、库存、这阵子的记录，全在这份里。换设备或清缓存前导出一次，就能原样搬回来。' +
        '一道菜谱大约 1 KB，5 MB 能存几千道。</div>';
   h += '<div class="setrow" style="margin-top:8px"><span>版本</span>' +
        '<span style="font-size:12.5px;color:#8A8478">' + BUILD + '</span></div>';
@@ -4200,7 +4199,7 @@ if(location.search.indexOf('test') >= 0){
     return pickAuthor('作者：小美（下厨房） 用料') === '小美';
   })());
 
-  chk('内置：清空作者、取消限量能真的存下去', (function(){
+  chk('编辑：清空作者、取消限量能真的存下去', (function(){
     var d = draftFrom(findItem('c13'));
     d.cap = null; d.author = '';
     saveRecipe(d);
