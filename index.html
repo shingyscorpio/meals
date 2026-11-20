@@ -382,7 +382,7 @@ var BUILTIN = [
   {id:'p04',n:'小炒牛肉',cat:'protein',hand:8,wall:8,fire:'watch',vessel:'pan',staple:'beef',red:true,lv:'L1',
    needs:['beef','cilantro'],taste:[2,0,2],cuisine:'中式',
    m:'早上现上浆 5 分钟（淀粉+油封面）；热锅滑散变色捞出，炒香蒜辣，回锅下香菜。',
-   prep:[{min:5,text:'牛里脊切片、香菜切段、蒜和泡椒切好',ph:'4°C，不腌'},{min:5,text:'上浆不提前，早上现做',ph:'含淀粉，冷藏会脱浆'}],
+   prep:[{min:5,text:'牛里脊切片、香菜切段、蒜和泡椒切好',ph:'4°C，不腌'},{min:5,text:'上浆不提前，早上现做',ph:'含淀粉，冷藏会脱浆',am:1}],
    note:'上浆是最贵的 5 分钟，省不掉'},
 
   {id:'p05',n:'泰式酸辣牛肉',cat:'protein',hand:6,wall:8,fire:'none',vessel:'pan',staple:'beef',red:true,lv:'L2',
@@ -625,7 +625,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20';
+var BUILD = '2026-11-20 16:15';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -659,22 +659,38 @@ state.pending = state.pending || [];
 state.extraIng = state.extraIng || {};
 rebuildItems();
 
-function load(){
-  try{
-    var raw = localStorage.getItem(KEY);
-    if(raw){
-      var s = JSON.parse(raw);
-      if(s && s.version === 4) return s;
-    }
-  }catch(e){}
+function dataDefaults(){
   return {
     version:4,
     settings:{ window:15, yogurt:true, fruit:true },
     inventory: seedInventory(),
     history: [],
     recipes: [], edits:{}, hidden:[], extraIng:{}, pending: [],
+    shelf:{}, shelfName:{},
     today: { date:'', skipped:[], locks:{}, pick:null, eaten:null, consumed:null }
   };
+}
+function load(){
+  var dft = dataDefaults();
+  try{
+    var raw = localStorage.getItem(KEY);
+    if(raw){
+      var s = JSON.parse(raw);
+      if(s && s.version === 4){
+        /* 版本号没变、字段却一直在加（shelf / shelfName / today.consumed…）。
+           缺谁补谁，而不是「version 对就整份返回」——少一个 today，
+           第一屏 ensurePick 就会读 undefined.date 直接白屏。 */
+        Object.keys(dft).forEach(function(k){
+          if(s[k] == null){ s[k] = dft[k]; return; }
+          if((k === 'settings' || k === 'today') && typeof s[k] === 'object'){
+            Object.keys(dft[k]).forEach(function(k2){ if(s[k][k2] === undefined) s[k][k2] = dft[k][k2]; });
+          }
+        });
+        return s;
+      }
+    }
+  }catch(e){}
+  return dft;
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
 /* 这份数据实际占多少字节：localStorage 按 UTF-16 存，一个字符 2 字节 */
@@ -748,13 +764,28 @@ function matchIng(raw){
   return hit;
 }
 
+/* 一条用料行的长相：「名字 数量 单位」，或「名字 适量」。
+   原来的写法不锚定整行，只要句子里出现「片/把/只」或某个中文数字就算，
+   于是「把鸡蛋打散，加一点盐」「小火煮两分钟」都被当成食材，
+   而 matchIng 是子串匹配，句子里的「鸡蛋」还会被真的塞进用料表。 */
+var ING_UNIT = '个根颗瓣片勺把只条克斤块袋包盒瓶罐束张杯碗撮';
 function looksLikeIngredient(L){
-  if(L.length > 24) return false;
-  if(/^步骤\s*\d/.test(L)) return false;
-  if(L.length > 16 && /[。；;]$/.test(L)) return false;
-  if(/^(做法|步骤|小贴士)/.test(L)) return false;
-  return /^[^\d：:]{1,14}\s*[：:]?\s*[\d一二三四五六七八九十两半几]/.test(L)
-      || /适量|少许|一些|克|g|ml|毫升|个|根|颗|瓣|片|勺|把|只|条/.test(L);
+  var s = String(L || '').trim();
+  if(!s || s.length > 24) return false;
+  if(/^步骤\s*\d/.test(s)) return false;
+  if(/^(做法|步骤|小贴士)/.test(s)) return false;
+  /* 带句子标点的、以动词开头的，都是做法不是用料 */
+  if(/[，,。；;！!？?]/.test(s)) return false;
+  if(/^(把|将|先|再|然后|最后|倒入|放入|加入|下锅|出锅|盛出|撒|淋|浇|拌|搅)/.test(s)) return false;
+  /* 括号里的补充说明不参与判断：「番茄（中等大小）2个」 */
+  var t = s.replace(/[（(][^）)]*[)）]/g, '').trim();
+  if(!t) return false;
+  var num = '[\\d一二三四五六七八九十两半几]+';
+  /* 单位可以是中文量词（可带「小/大」），也可以是 g / ml / kg 这种英文单位 */
+  var unit = '(?:[' + ING_UNIT + ']{0,2}|kg|g|ml|毫升|升)';
+  var qtyTail = '\\s*[.．~\\-–/]?\\s*[\\d一二三四五六七八九十]*\\s*(小|大)?' + unit + '\\s*(约|左右)?\\s*$';
+  return new RegExp('^[^\\d：:\\s]{1,12}\\s*[：:]?\\s*' + num + qtyTail).test(t)
+      || new RegExp('^[^\\d：:\\s]{1,12}\\s*[：:]?\\s*(适量|少许|一些|少量|若干|按需|够用)\\s*$').test(t);
 }
 function splitIngLine(L){
   var s = String(L).replace(/^[-·•*·]\s*/, '').trim();
@@ -765,7 +796,7 @@ function splitIngLine(L){
   return {name:s.trim(), qty:''};
 }
 function stripStepNo(L){
-  return String(L).replace(/^(步骤\s*\d+[:：.、]?|\d+\s*[:：.、)]|第[一二三四五六七八九十]+步[:：]?)\s*/, '').trim();
+  return String(L).replace(/^(步骤\s*\d+[:：.、]?|\d+\s*[：:.．、)）]|第[一二三四五六七八九十]+步[:：]?)\s*/, '').trim();
 }
 
 /* 从做法文字猜火/器具/时间——猜错很正常，所以草稿最后要人过一眼 */
@@ -786,8 +817,11 @@ function guessCook(m){
 function isQtyLine(s){
   var t = String(s || '').trim();
   if(!t) return false;
-  if(/^(适量|少许|一些|半个|若干|按需|够用)$/.test(t)) return true;
-  return t.length <= 8 && /^[\d一二三四五六七八九十两半几]+\s*[^\s\d]{0,3}$/.test(t);
+  if(/^(适量|少许|一些|少量|半个|若干|按需|够用)$/.test(t)) return true;
+  /* 区间和分数：「2~3个」「1/2根」「3-4根」。口径要和 isQtyTok 一致，
+     否则两行式用料里数量行认不出来，食物名反被当数量丢掉 */
+  return t.length <= 8 &&
+    /^[\d一二三四五六七八九十两半几]+([.．~\-–/][\d一二三四五六七八九十两半几]+)?\s*[个根颗瓣片勺把只条克斤块袋包盒瓶罐束张杯碗撮]{0,3}$/.test(t);
 }
 /* OCR 把整列用料挤成一行时，「名字 数量 名字 数量」会交替出现。
    按空格切成 token，奇数位全是数量状才认——这样「番茄一个 很新鲜」不会被误切 */
@@ -821,7 +855,7 @@ function shortTitle(s){
 
 /* 作者署名：从截图识别或整段复制来的文字里常带「作者：xxx」，单独摘出来，
    一是能填进 author 字段，二是不让它混进菜名或步骤 */
-var AUTHOR_RE = /作者\s*[:：]\s*([^\s，。、|｜]{1,20})/;
+var AUTHOR_RE = /作者\s*[:：]\s*([^\s，。、|｜（）()【】\[\]:：；;]{1,20})/;
 function pickAuthor(s){
   var m = String(s || '').match(AUTHOR_RE);
   return m ? m[1].trim() : '';
@@ -837,11 +871,14 @@ function reflowText(raw){
   s = s.replace(/[\u3000\u00a0]/g, ' ').replace(/[|｜]/g, '\n');
   /* 只有「用料」在菜谱正文里基本不当普通词用，可以不带冒号就切。
      「食材 / 原料」不行——「用最简单的食材」这种简介会被切坏，必须带冒号 */
-  s = s.replace(/用料/g, '\n用料\n');
+  s = s.replace(/用料\s*[:：]?/g, '\n用料\n');
   s = s.replace(/(食材|原料)\s*[:：]/g, '\n$1：\n');
   s = s.replace(/(主料|辅料|配料|调料|调味料)\s*[:：]/g, '\n$1：\n');
   /* 「的」是安全锚点：「这道菜做法简单」不会被切，「番茄炒蛋的做法」会 */
   s = s.replace(/(做法步骤|烹饪步骤|制作步骤|的做法|做法大全|的小贴士)/g, '\n$1\n');
+  /* 裸「做法：」「步骤：」也要断开——OCR 和手打常常不带「的」。
+     前面排除「的」，免得把刚切好的「的做法」再切一次。 */
+  s = s.replace(/(^|[^的])(做法|步骤)\s*[:：]/g, '$1\n$2：\n');
   s = s.replace(/(小贴士|烹饪技巧|贴士)\s*[:：]/g, '\n$1：\n');
   s = s.replace(/步骤\s*(\d+)/g, '\n步骤$1\n');
   return s;
@@ -874,7 +911,7 @@ function isNameLike(s){
    只有序号严格 1、2、3 递进才拆，避免把「2.5 克」这类数字当步骤号 */
 function splitSteps(L){
   var s = String(L || '');
-  var re = /(?:^|[\s。；;，,])(\d{1,2})\s*[.、．)）]\s*/g;
+  var re = /(?:^|[\s。；;，,：:（(])(\d{1,2})\s*[.、．)）]\s*/g;
   var idx = [], m;
   while((m = re.exec(s))) idx.push({ at:m.index, no:Number(m[1]), end:re.lastIndex });
   if(idx.length < 2) return null;
@@ -916,10 +953,12 @@ function parseRecipeText(raw){
        (/^(复制这条|复制链接|复制信息|打开小红书|打开下厨房|打开 ?APP|长按识别|戳这里|点击查看)/.test(L) ||
         /^(下厨房|家常菜谱|收藏|关注)$/.test(L))) continue;
 
-    /* 段落标题：可以是「用料」，也可以是「咖喱鸡的做法」这种带菜名的 */
-    if(/(用料|食材|原料|材料)\s*[:：]?$/.test(L) && L.length <= 30){ mode = 'ing'; continue; }
+    /* 段落标题：可以是「用料」，也可以是「咖喱鸡的做法」这种带菜名的。
+       用料类必须整行就是标题——原来没锚行首，「准备好所有材料」会把状态机
+       切回用料段，后面那些短步骤就被吞掉了 */
+    if(/^(用料|食材|原料|材料|所需食材|食材准备)\s*[:：]?$/.test(L) && L.length <= 30){ mode = 'ing'; continue; }
     if(/^(主料|辅料|配料|调料|调味料)\s*[:：]?$/.test(L)){ mode = 'ing'; continue; }
-    if(/(做法|步骤|制作方法)\s*[:：]?$/.test(L) && L.length <= 30 && !/^步骤\s*\d/.test(L)){ mode = 'step'; continue; }
+    if(/(做法|步骤|制作方法)\s*[:：]?$/.test(L) && L.length <= 30 && !/\d/.test(L) && !/^步骤\s*\d/.test(L)){ mode = 'step'; continue; }
     if(/(小贴士|贴士|烹饪技巧|tips?)\s*[:：]?$/i.test(L) && L.length <= 30){ mode = 'tip'; continue; }
 
     /* 菜名下面紧跟的一行如果像人名，那是作者，不是第一步做法。
@@ -977,7 +1016,16 @@ function parseRecipeText(raw){
         else if(!isSeasoning(p.name) && p.name.length <= 10) d.unknown.push(p.name);
         continue;
       }
-      if(L.length > 12){ mode = 'step'; d.steps.push(stripStepNo(L)); }
+      /* 既不像用料、又不在「名字/数量」两行式里的行。
+         带句号逗号的、以动作开头的，是做法，转段；短名词留成「没认出」让人确认，
+         别像原来那样直接 continue 吞掉——那样用户只会看到「步骤少了几步」 */
+      if(L.length > 12 || /[。，；]/.test(L) ||
+         /^(把|将|先|再|然后|最[后初]|下锅|倒入|放入|加入|出锅|盛出)/.test(L) ||
+         /(煮|炒|煎|蒸|烤|炖|焖|拌|焯|切|剁|拍|揉|炸|熬|淋|撒|盛|装盘)/.test(L)){
+        mode = 'step'; d.steps.push(stripStepNo(L));
+      } else if(!isSeasoning(L) && L.length <= 10){
+        d.unknown.push(L);
+      }
       continue;
     }
 
@@ -1006,12 +1054,12 @@ function parseRecipeText(raw){
 
   d.steps = d.steps.filter(function(s){ return s && s.trim(); });
 
-  /* 兜底：没有用料时，把「像人名」的那一步挪成作者。
-     否则只粘「菜名 + 作者」会得到「做法：爱做饭的姥姥」 */
-  if(!d.needs.length && !d.author){
-    for(var q = 0; q < d.steps.length; q++){
-      if(isNameLike(d.steps[q])){ d.author = String(d.steps[q]).trim(); d.steps.splice(q, 1); break; }
-    }
+  /* 兜底：只粘了「菜名 + 一行作者」时，把那一行挪成作者。
+     条件必须收紧到「只有一行正文」，否则任何两字步骤（装盘、切片、拌匀）
+     都会通过 isNameLike 被当成人名扣走，步骤就少一步 */
+  if(!d.needs.length && !d.author && d.steps.length === 1 && isNameLike(d.steps[0])){
+    d.author = String(d.steps[0]).trim();
+    d.steps = [];
   }
   d.m = d.steps.map(function(s, i){ return (i + 1) + '. ' + s; }).join('\n');
   if(!d.m && d.tip) d.m = d.tip;
@@ -1086,7 +1134,11 @@ function draftFrom(it){
   d._new = 0;
   d.needs = (it.needs || []).slice();
   d.taste = (it.taste || [0,0,0]).slice();
-  d.prep = (it.prep || []).map(function(p){ return {min:p.min, text:p.text, ph:p.ph}; });
+  d.prep = (it.prep || []).map(function(p){
+    var o = {min:p.min, text:p.text, ph:p.ph};
+    if(p.am) o.am = 1;
+    return o;
+  });
   d.unknown = [];
   /* 已经存下来的菜谱，字段都是人定过的，不要再被推断覆盖 */
   d._auto = {cat:0, time:0, fire:0, vessel:0};
@@ -1100,7 +1152,11 @@ function textToPrep(txt){
     var ph = '', i = l.indexOf('|');
     if(i >= 0){ ph = l.slice(i + 1).trim(); l = l.slice(0, i).trim(); }
     var m = l.match(/^(\d+)\s*[分钟′']*\s*(.*)$/);
-    return {min: m ? Number(m[1]) : 0, text: (m ? m[2] : l).trim(), ph: ph};
+    var body = (m ? m[2] : l).trim();
+    /* 「早上现做」的备料不能算进「今晚」清单，编辑来回一趟也要保住这个标记 */
+    var o = {min: m ? Number(m[1]) : 0, text: body, ph: ph};
+    if(/早上现做|早上做|不能提前/.test(body)) o.am = 1;
+    return o;
   });
 }
 
@@ -1153,11 +1209,12 @@ function inferRecipe(d){
   var a = d._auto || {};
 
   if(a.cat){
-    if(has(PROTEIN_IDS)) d.cat = 'protein';
-    else if(has(CARB_IDS)) d.cat = 'carb';
+    var nm = d.n || '';
+    /* 菜名里的「鸡/鱼/肉」要放在「有任意食材就判纤维」之前：
+       否则「香菇滑鸡」只要认出一个香菇，就被判成纤维，永远进不了蛋白格 */
+    if(has(PROTEIN_IDS) || /肉|蛋|鱼|虾|鸡|牛|猪|豆腐|奶/.test(nm)) d.cat = 'protein';
+    else if(has(CARB_IDS) || /土豆|红薯|南瓜|玉米|山药|面|饭|馒头|粥|包/.test(nm)) d.cat = 'carb';
     else if(ing.length) d.cat = 'fiber';
-    else if(/肉|蛋|鱼|虾|鸡|牛|猪|豆腐|奶/.test(d.n || '')) d.cat = 'protein';
-    else if(/土豆|红薯|南瓜|玉米|山药|面|饭|馒头|粥|包/.test(d.n || '')) d.cat = 'carb';
   }
   if(a.time || a.fire || a.vessel){
     var g = guessCook(txt);
@@ -1165,13 +1222,20 @@ function inferRecipe(d){
     if(a.vessel) d.vessel = g.vessel;
     if(a.time){ d.hand = g.hand; d.wall = Math.max(g.wall, g.hand); }
   }
-  d.red = (ing.indexOf('beef') >= 0 || ing.indexOf('pork') >= 0) ? 1 : 0;
+  var RED_IDS = ['beef', 'pork', 'porkMince', 'lamb', 'bacon', 'sausage'];
+  d.red = ing.some(function(x){ return RED_IDS.indexOf(x) >= 0; }) ? 1 : 0;
   d.fiber = (d.cat === 'protein' && (ing.indexOf('chickpea') >= 0 || ing.indexOf('woodEar') >= 0)) ? 1 : 0;
-  d.taste = [
-    /酸|醋|柠檬|百香果/.test(txt) ? 1 : 0,
-    /辣|椒|剁椒|泡椒/.test(txt) ? 1 : 0,
-    /红烧|浓|酱|卤|炖/.test(txt) ? 1 : 0
-  ];
+  /* 口味顺序按 schema：[浓淡, 酸, 辣]，每项 0–2。
+     原来写成 [酸, 辣, 浓] 且只给 0/1 —— tastePenalty 用 taste[1]>=2 判酸、taste[2]>=2 判辣，
+     顺序和阈值同时错位，「双酸/双辣」对自建菜永远不成立。
+     另外不能无条件重算：内置菜谱的口味是人工标的，改一个用料就冲掉就白标了。 */
+  if(!(d.taste || []).some(function(x){ return x; })){
+    d.taste = [
+      /红烧|浓|酱|卤|炖/.test(txt) ? 2 : 0,
+      /酸|醋|柠檬|百香果/.test(txt) ? 2 : 0,
+      /辣|椒|剁椒|泡椒/.test(txt) ? 2 : 0
+    ];
+  }
   d.cuisine = /泰/.test(txt) ? '泰式' : (/(沙拉|吐司|三明治|意面|芝士|黄油|烤)/.test(txt) ? '西式' : '中式');
   if(!d.staple || a.cat) d.staple = ing[0] || d.staple || '';
   d.lv = d.hand <= 4 ? 'L2' : 'L1';
@@ -1310,6 +1374,10 @@ function sheetRecipe(){
 
 /* 粘贴 → 合并进当前草稿（菜名/作者/链接已有的不覆盖，方便从待补录进来接着粘） */
 function doPasteParse(){
+  /* 先把表单里已经打好的字收回草稿：粘贴框里的内容识别后会重绘整个面板，
+     不先读回来的话，用户先打的菜名/作者/链接会被这次重绘抹掉。
+     而识别结果只在「认出了菜名」时才覆盖，所以手打的菜名恰好是最容易丢的那种 */
+  readForm();
   var el = document.getElementById('f_paste');
   var txt = el ? el.value : (ui.pasteTxt || '');
   ui.pasteTxt = txt;
@@ -1333,7 +1401,8 @@ function doPasteParse(){
   if(p.unknown && p.unknown.length) d.unknown = p.unknown;
   if(p.steps && p.steps.length) d.m = p.steps.map(function(s, i){ return (i + 1) + '. ' + s; }).join('\n');
   else if(p.tip) d.m = p.tip;
-  d._auto = {cat:1, time:1, fire:1, vessel:1};
+  /* 不要重置 _auto：用户已经点过的「放哪一格 / 要多久 / 守着锅吗」是人的决定，
+     粘贴只是补内容，不该把人刚做的选择推翻。新建草稿的 _auto 本来就是全自动 */
   inferRecipe(d);
   d._pasteOpen = 0;
   ui.impInfo = impSummary(d);
@@ -1347,8 +1416,17 @@ function readForm(){
   var val = function(id){ var el = document.getElementById(id); return el ? el.value : null; };
   var v;
   if((v = val('f_n')) != null) d.n = v.trim();
-  if((v = val('f_hand')) != null) d.hand = Math.max(0, Math.min(120, Math.round(Number(v) || 0)));
-  if((v = val('f_wall')) != null) d.wall = Math.max(0, Math.min(300, Math.round(Number(v) || 0)));
+  if((v = val('f_hand')) != null){
+    var hv = Math.max(0, Math.min(120, Math.round(Number(v) || 0)));
+    /* 手改了精确分钟，就当成人的决定：否则下一次点用料/inferRecipe 会把机器猜的值盖回来 */
+    if(hv !== d.hand) d._auto.time = 0;
+    d.hand = hv;
+  }
+  if((v = val('f_wall')) != null){
+    var wv = Math.max(0, Math.min(300, Math.round(Number(v) || 0)));
+    if(wv !== d.wall) d._auto.time = 0;
+    d.wall = wv;
+  }
   if((v = val('f_m')) != null) d.m = v;
   if((v = val('f_prep')) != null) d.prep = textToPrep(v);
   if((v = val('f_note')) != null) d.note = v.trim();
@@ -1489,6 +1567,9 @@ function dropFilledPending(d){
     if(dishCore(x.n) !== a) return true;
     /* 两边都写了作者且不是同一个，说明是同名的另一版，留着 */
     if(d.author && x.author && normDish(d.author) !== normDish(x.author)) return true;
+    /* 自己填的这道没写作者，就别去认领「指明要某位作者」的那条：
+       认领了等于静默删掉用户的需求，之后也发不出去了 */
+    if(!d.author && x.author) return true;
     return false;
   });
   var n = before - state.pending.length;
@@ -1616,22 +1697,35 @@ function addIngToDraft(name){
   if(!t) return;
   var id = matchIng(t);
   if(!id){
-    id = 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+    /* 冰箱里可能已经有这条自定义食材（cus_xxx）。不认它就会另起一个 x_xxx，
+       于是「冰箱里明明有」照样被列进今天要买 */
+    var cus = (state.inventory || []).filter(function(x){ return x.custom && x.name === t; })[0];
+    id = cus ? cus.id : 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
     state.extraIng[id] = t;
     save();
   }
   if(ui.draft.needs.indexOf(id) < 0) ui.draft.needs.push(id);
+}
+/* 老数据或手改过的备份可能缺字段（没有 taste 数组，
+   tastePenalty 里读 x.taste[1] 就会抛错，而它在渲染链上，一崩就是白屏） */
+function normItem(it){
+  it.needs = Array.isArray(it.needs) ? it.needs : [];
+  it.taste = (Array.isArray(it.taste) && it.taste.length === 3) ? it.taste : [0, 0, 0];
+  it.prep = Array.isArray(it.prep) ? it.prep : [];
+  if(it.hand == null) it.hand = 5;
+  if(it.wall == null) it.wall = it.hand;
+  return it;
 }
 function rebuildItems(){
   var out = [];
   BUILTIN.forEach(function(it){
     if(state.hidden.indexOf(it.id) >= 0) return;
     var patch = state.edits[it.id];
-    out.push(patch ? Object.assign({}, it, patch, {builtin:1}) : it);
+    out.push(normItem(patch ? Object.assign({}, it, patch, {builtin:1}) : Object.assign({}, it)));
   });
   state.recipes.forEach(function(it){
     if(state.hidden.indexOf(it.id) >= 0) return;
-    out.push(it);
+    out.push(normItem(it));
   });
   ITEMS.length = 0;
   Array.prototype.push.apply(ITEMS, out);
@@ -1643,19 +1737,31 @@ function ingName(id){ return (id && (ING[id] || state.extraIng[id])) || id || ''
 
 /* 存一条：id 为空即新建。内置的只记一份覆盖 patch，原始数据不动 */
 function saveRecipe(d){
+  /* 新建的草稿 id 是空串。不补的话，第二道会命中「id 也是空串」的第一道，直接把它覆盖掉。
+     原来只有测试代码在补 id，生产路径没补——连存两道自建菜，库里只会剩最后一道。 */
+  if(!d.id) d.id = newRecipeId();
+  d._new = 0;
   var item = {
     id:d.id, n:d.n, cat:d.cat, hand:d.hand, wall:d.wall, fire:d.fire, vessel:d.vessel,
-    staple:d.staple, needs:d.needs.slice(), taste:d.taste.slice(), cuisine:d.cuisine,
+    staple:d.staple, needs:d.needs.slice(), taste:(d.taste || [0,0,0]).slice(), cuisine:d.cuisine,
     lv:d.lv, m:d.m, prep:(d.prep || []).slice(), src:pickSrc(d.src)
   };
-  if(d.author) item.author = d.author;
-  if(d.cap != null) item.cap = d.cap;
-  if(d.red) item.red = 1;
-  if(d.fiber) item.fiber = d.fiber;
-  if(d.note) item.note = d.note;
   if(isBuiltin(d.id)){
+    /* 内置菜谱存的是 patch，rebuildItems 用 Object.assign 合并。
+       空值如果不显式写进去，Object.assign 会保留内置原值——
+       于是「清空作者 / 取消限量 / 去掉红肉」这些操作等于没做。 */
+    item.author = d.author || '';
+    item.note = d.note || '';
+    item.cap = (d.cap == null) ? null : d.cap;
+    item.red = d.red ? 1 : 0;
+    item.fiber = d.fiber ? 1 : 0;
     state.edits[d.id] = item;
   } else {
+    if(d.author) item.author = d.author;
+    if(d.cap != null) item.cap = d.cap;
+    if(d.red) item.red = 1;
+    if(d.fiber) item.fiber = d.fiber;
+    if(d.note) item.note = d.note;
     var hit = -1;
     state.recipes.forEach(function(x, k){ if(x.id === d.id) hit = k; });
     if(hit >= 0) state.recipes[hit] = item; else state.recipes.push(item);
@@ -1668,7 +1774,9 @@ function dropPickIfTouched(id){
   var pk = state.today && state.today.pick;
   if(!pk || !pk.combo) return;
   var hit = slotsOf(pk.combo).some(function(x){ return x && x.id === id; });
-  if(hit){ state.today.pick = null; state.today.eaten = null; }
+  /* 只重排，不动 eaten：已经记过账了，把记账状态清掉会让「就吃这个」再记一次，
+     同一天写两条记录、库存扣两轮，而 consumed 已被覆盖，多扣的那份永远还不回来 */
+  if(hit){ state.today.pick = null; }
 }
 /* 删除：每类至少留 3 道，否则组合就凑不齐了 */
 function deleteRecipe(id){
@@ -1677,7 +1785,8 @@ function deleteRecipe(id){
   var same = ITEMS.filter(function(x){ return x.cat === it.cat; });
   if(same.length <= 3) return '这类只剩 ' + same.length + ' 道，再删就排不出今天这顿了';
   if(state.hidden.indexOf(id) < 0) state.hidden.push(id);
-  if(isBuiltin(id)) delete state.edits[id];
+  /* 内置的修改存在 state.edits 里，删掉它恢复后就变成「恢复出厂」；
+     自建菜谱的修改在 state.recipes 里，hidden 不影响它。两条路径行为要一致：只藏，不动改动 */
   /* 自建的不从 recipes 里真删，只是藏起来，这样「恢复」还能拿回来 */
   dropPickIfTouched(id);
   rebuildItems(); save();
@@ -1738,7 +1847,10 @@ function setShelfDays(id, days, name){
 function invAdd(id, qty, exp, name){
   var hit = invAll(id);
   var e = exp || dstr(shelfDays(id, name));
-  if(hit){
+  /* 只和「还没过期」的那行合并。过期货并进来再把到期日往后推，等于给旧货续命：
+     推荐会把它当成还能用，冰箱页也不再提示过期。过期的就留着让它按过期处理，另起一行。 */
+  var fresh = hit && daysBetween(todayStr(), hit.exp) >= 0;
+  if(fresh){
     hit.qty += qty;
     if(e > hit.exp) hit.exp = e;
     if(name && !hit.name) hit.name = name;
@@ -1762,6 +1874,10 @@ function addCustom(name, days){
   });
   if(hitId){
     if(days) setShelfDays(hitId, days);
+    /* 常备品（牛奶、鸡蛋、坚果…）不进库存表：invList 会把它过滤掉，
+       真记进去就成了「用户看不见、也删不掉，但 eat 会扣」的幽灵库存。
+       只记它的保质期/名字就够了。 */
+    if(isPantry(hitId)) return hitId;
     invAdd(hitId, 1);
     return hitId;
   }
@@ -1814,17 +1930,19 @@ function stapleDaysAgo(staple){
   });
   return best;
 }
-function weekCount(id){
-  var n = 0;
+/* 最近 span 天内吃过几次。口径必须是「小于 span」：
+   <= 7 会把 7 天前的今天也算进来，变成 8 天窗口，比界面承诺多一天 */
+function weekCount(id, span){
+  var n = 0, w = span || 7;
   state.history.forEach(function(h){
-    if(daysBetween(h.date, todayStr()) <= 7 && [h.p,h.f,h.c].indexOf(id) >= 0) n++;
+    if(daysBetween(h.date, todayStr()) < w && [h.p,h.f,h.c].indexOf(id) >= 0) n++;
   });
   return n;
 }
 function redCountWeek(){
   var n = 0;
   state.history.forEach(function(h){
-    if(daysBetween(h.date, todayStr()) > 7) return;
+    if(daysBetween(h.date, todayStr()) >= 7) return;
     var ids = [h.p,h.f,h.c].filter(Boolean);
     if(ids.some(function(id){ var it = findItem(id); return it && it.red; })) n++;
   });
@@ -1850,10 +1968,18 @@ function evaluate(combo, date){
   /* 硬约束 3：动手时间不能超过窗口 */
   if(hand > win) return {ok:false, why:'动手超时'};
 
-  /* 硬约束 4：器具 ≤ 2 件（洗锅也算时间） */
-  var pots = 0;
-  if(slots.some(function(x){ return x.vessel === 'water' || x.vessel === 'steamer'; })) pots++;
-  if(slots.some(function(x){ return x.vessel === 'pan'; })) pots++;
+  /* 硬约束 4：器具 ≤ 2 件（洗锅也算时间）
+     原来只数「有没有水锅 + 有没有炒锅」，两次自增最大就是 2，
+     pots > 2 永远不会成立，这条约束从来没拦过任何组合；
+     空气炸锅、微波炉也完全没计入。改成按去重后的器具集合数。 */
+  var vs = {};
+  slots.forEach(function(x){
+    var v = x.vessel;
+    if(!v || v === 'none' || v === 'pre' || v === 'microwave') return;  /* 微波炉不用洗锅 */
+    if(v === 'steamer') v = 'water';                                    /* 蒸屉挂在水锅上 */
+    vs[v] = 1;
+  });
+  var pots = Object.keys(vs).length;
   if(pots > 2) return {ok:false, why:'器具超过 2 件'};
 
   /* 硬约束 5：同一道菜 7 天内不重复；同一主料 3 天内不重复 */
@@ -1865,10 +1991,18 @@ function evaluate(combo, date){
     if(ds !== null && ds < 3) return {ok:false, why:it.staple + ' 主料 3 天内用过'};
   }
 
-  /* 硬约束 6：每周频率上限 */
+  /* 硬约束 6：频率上限。cap 是「每周几次」，0.5 表示两周 1 次。
+     不能直接拿整数计数和小数比：1 >= 0.5 和 1 >= 1 是同一件事，
+     两周 1 次的菜第 8 天就会被放回来。窗口要按 cap 放大。 */
   for(var j = 0; j < slots.length; j++){
     var s2 = slots[j];
-    if(s2.cap != null && weekCount(s2.id) >= s2.cap) return {ok:false, why:s2.n + ' 本周次数已满'};
+    if(s2.cap != null){
+      var span = s2.cap >= 1 ? 7 : Math.round(7 / s2.cap);
+      var lim = s2.cap >= 1 ? s2.cap : 1;
+      if(weekCount(s2.id, span) >= lim){
+        return {ok:false, why:s2.n + (s2.cap >= 1 ? ' 本周次数已满' : ' 这两周已经排过了')};
+      }
+    }
   }
 
   /* ---------- 打分 ---------- */
@@ -1984,6 +2118,8 @@ function prepList(combo){
   var out = [], seen = {};
   slotsOf(combo).forEach(function(x){
     (x.prep || []).forEach(function(p){
+      /* am:1 = 早上现做，不能提前。混进「今晚」清单会让用户白干一遍（上浆过夜会脱浆） */
+      if(p.am) return;
       var k = p.text;
       if(seen[k]) return;
       seen[k] = 1;
@@ -2062,7 +2198,8 @@ function morningPlan(combo){
 var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:null, addGrp:'叶菜', addDays:3,
            draft:null, impMsg:null, pasteTxt:'', ingQ:'',
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
-           bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null };
+           bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null,
+           cusName:'', cusDays:null };
 (function(){
   var t = (location.hash || '').replace('#','');
   if(['today','fridge','lib','log'].indexOf(t) >= 0) ui.tab = t;
@@ -2079,6 +2216,9 @@ function ensurePick(){
 }
 
 function reroll(){
+  /* 今天已经记过账就先整体回滚（库存 + 历史），否则换一道再记一次，
+     前一批扣掉的料就永远回不来了 */
+  if(state.today.eaten) undoConsumed();
   var r = recommend();
   state.today.pick = r ? {combo:r.combo, ev:r.ev} : null;
   state.today.eaten = null;
@@ -2106,20 +2246,21 @@ function swapAll(){
 }
 
 function pickFromLib(it){
-  var c = state.today.pick.combo;
+  var c0 = state.today.pick.combo;
   var cat = it.cat;
-  if(c[cat]) state.today.skipped.push(c[cat].id);
+  /* 先在副本上试，通过了再落地。原来是直接改 state.today.pick.combo：
+     校验失败只弹个 toast，界面就停在一份违背硬约束的餐上，skipped 也被污染，
+     显示的动手分钟还是旧值——三处数据互相矛盾 */
+  var c = {protein:c0.protein, fiber:c0.fiber, carb:c0.carb};
   c[cat] = it;
   if(cat === 'protein' && it.fiber){ c.fiber = null; }
-  if(cat === 'fiber'){ state.today.locks.fiber = it.id; }
-  state.today.locks[cat] = it.id;
   var ev = evaluate(c, todayStr());
-  if(ev.ok){
-    state.today.pick = {combo:c, ev:ev};
-    save(); toast('换成 ' + it.n + ' 了');
-  } else {
-    toast('这样换会撞硬约束：' + ev.why);
-  }
+  if(!ev.ok){ toast('这样换会撞硬约束：' + ev.why); return; }
+  if(state.today.eaten) undoConsumed();   /* 餐变了，原来那次记账作废，库存还原 */
+  if(c0[cat]) state.today.skipped.push(c0[cat].id);
+  state.today.pick = {combo:c, ev:ev};
+  state.today.locks[cat] = it.id;
+  save(); toast('换成 ' + it.n + ' 了');
   render();
 }
 
@@ -2133,32 +2274,54 @@ function eat(){
     });
   });
   var consumed = [];
-  order.forEach(function(id){
-    var inv = invAll(id);
-    if(!inv) return;
-    var n = Math.min(need[id], inv.qty);
-    inv.qty -= n;
-    consumed.push({id:id, qty:n});
-  });
+  /* 同一样食材可能有好几行（比如过期的旧行 + 新买的一行）。
+     invAll 只取第一行，会扣到过期那行上；这里按到期日从早到晚扣，
+     过期的行不扣——它不该被当成吃掉的东西，冰箱页会单独提示。 */
+  function takeFrom(id, want){
+    var rows = state.inventory.filter(function(x){ return x.id === id && x.qty > 0; });
+    rows.sort(function(a, b){ return daysBetween(todayStr(), a.exp) - daysBetween(todayStr(), b.exp); });
+    var left = want;
+    rows.forEach(function(r){
+      if(left <= 0) return;
+      if(daysBetween(todayStr(), r.exp) < 0) return;
+      var n = Math.min(left, r.qty);
+      r.qty -= n; left -= n;
+      /* 到期日/名字一起记：撤销时这行可能已被 invPurge 删掉，重建要按原批次还原 */
+      consumed.push({id:id, qty:n, exp:r.exp, name:r.name, custom:r.custom});
+    });
+  }
+  order.forEach(function(id){ takeFrom(id, need[id]); });
   invPurge();
   state.today.consumed = consumed;
   state.today.eaten = true;
+  /* 同一天只留一条：再记一次是「替换今天这顿」，不是追加一顿 */
+  state.history = state.history.filter(function(h){ return h.date !== todayStr(); });
   state.history.unshift({ date:todayStr(), p:c.protein?c.protein.id:null, f:c.fiber?c.fiber.id:null,
                           c:c.carb?c.carb.id:null,
                           name:[c.protein&&c.protein.n, c.fiber&&c.fiber.n, c.carb&&c.carb.n].filter(Boolean).join(' + ') });
   save(); render(); toast('记下了，今晚的活在上面');
 }
 
-function undoTodaysEat(){
-  state.history = state.history.filter(function(h){ return h.date !== todayStr(); });
+/* 撤掉今天这次记账：还原库存、删掉今天的记录。不提示不渲染，供换餐复用 */
+function undoConsumed(){
   (state.today.consumed || []).forEach(function(x){
     if(!x.qty) return;
     var inv = invAll(x.id);
     if(inv) inv.qty += x.qty;
-    else state.inventory.push({id:x.id, qty:x.qty, exp:dstr(3), added:todayStr()});
+    else{
+      var row = {id:x.id, qty:x.qty, exp:x.exp || dstr(3), added:todayStr()};
+      if(x.name) row.name = x.name;
+      if(x.custom) row.custom = 1;
+      state.inventory.push(row);
+    }
   });
+  state.history = state.history.filter(function(h){ return h.date !== todayStr(); });
   state.today.consumed = null;
   state.today.eaten = null;
+}
+
+function undoTodaysEat(){
+  undoConsumed();
   save(); render(); toast('撤销了，重新挑');
 }
 
@@ -2167,6 +2330,15 @@ function undoTodaysEat(){
    ============================================================ */
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 function rich(s){ return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+
+/* 重画但保住滚动位置：面板开着的时候、或刚关掉面板时用，
+   否则 render 的 scrollTo(0,0) 会把冰箱页弹回顶上 */
+function renderKeep(){
+  var sy = 0;
+  try{ sy = window.scrollY || 0; }catch(e){}
+  render();
+  try{ window.scrollTo(0, sy); }catch(e){}
+}
 
 function render(){
   ensurePick();
@@ -2339,7 +2511,7 @@ function viewLib(){
                '<span class="tag' + (it.fire === 'watch' ? ' warn' : '') + '">' + FIRE[it.fire] + '</span>' +
                (it.ext ? '<span class="tag">补录</span>' : '') +
                (!isBuiltin(it.id) ? '<span class="tag ok">自建</span>' : '') +
-               (it.cap != null ? '<span class="tag warn">限量 ' + it.cap + '/周</span>' : '') +
+               (it.cap != null ? '<span class="tag warn">限量 ' + (it.cap < 1 ? '两周 1 次' : '每周 ' + it.cap + ' 次') + '</span>' : '') +
                (it.red ? '<span class="tag warn">红肉</span>' : '');
     var mTxt = it.m || '';
     /* 导入的菜做法常常十来行，列表里默认折三行，要看再展开 */
@@ -2572,8 +2744,11 @@ function backupText(){
 }
 function backupStat(d){
   return {
-    dishes: (d && Array.isArray(d.recipes)) ? d.recipes.length : 0,
-    days: (d && d.log) ? Object.keys(d.log).length : 0,
+    dishes: (d && Array.isArray(d.recipes))
+      ? d.recipes.filter(function(x){ return !(Array.isArray(d.hidden) && d.hidden.indexOf(x.id) >= 0); }).length
+      : 0,
+    days: (d && Array.isArray(d.history)) ? d.history.length
+        : ((d && d.log) ? Object.keys(d.log).length : 0),
     inv: (d && Array.isArray(d.inventory)) ? d.inventory.length : 0
   };
 }
@@ -2588,7 +2763,14 @@ function parseBackup(raw){
   catch(e){ return { err:'内容不完整，多半是复制时被截断了（微信对超长文字会截断），试试用「存成文件」再导入' }; }
   var d = (o && o.__backup) ? o.data : o;
   if(!d || typeof d !== 'object') return { err:'认不出这是备份' };
-  if(!Array.isArray(d.recipes) && !d.log && !d.inventory) return { err:'这份里没有菜谱、记录或库存，可能不是这个应用的备份' };
+  /* 必须能确认「这是本应用的备份」，否则随便一份带 inventory / recipes 键的
+     JSON（别的应用导出的、游戏存档）都会被当成备份，确认覆盖后整台设备的
+     数据就被换成一堆残缺结构——而且找不回来 */
+  var isOurs = (o && (o.__backup === 1 || o.app === '今天这顿')) || d.version === 4;
+  if(!isOurs) return { err:'这份里没有本应用的版本信息，不是这个应用的备份' };
+  if(!Array.isArray(d.recipes) && !Array.isArray(d.inventory) && !Array.isArray(d.history)){
+    return { err:'这份里没有菜谱、记录或库存，可能不是这个应用的备份' };
+  }
   if(!Array.isArray(d.recipes)) d.recipes = [];
   return { ok:1, data:d, at:fmtAt(o && o.at) };
 }
@@ -2680,11 +2862,15 @@ function copyBackup(){
   }
 }
 
-function checkRestore(){
-  var box = document.getElementById('rsTxt');
-  var raw = (box && box.value != null) ? box.value : (ui.rsTxt || '');
-  ui.rsTxt = raw;
-  var r = parseBackup(raw);
+/* raw 可以由调用方传进来（选文件时文件内容还没进 textarea）。
+   原来只读 textarea，选完文件立刻被空框覆盖，永远是「还没粘内容」 */
+function checkRestore(raw){
+  if(raw == null){
+    var box = document.getElementById('rsTxt');
+    raw = box ? box.value : (ui.rsTxt || '');
+  }
+  ui.rsTxt = String(raw || '');
+  var r = parseBackup(ui.rsTxt);
   if(r.ok){
     ui.rsParsed = r;
     ui.rsInfo = { ok:1, stat:backupStat(r.data), at:r.at };
@@ -2697,8 +2883,31 @@ function checkRestore(){
 
 function applyBackup(){
   if(!ui.rsParsed || !ui.rsParsed.ok){ toast('先点「检查一下」'); return; }
+  /* 检查完又改了内容？以框里现在的文字为准重新解析。
+     否则「已检查 A、实际写入 A」跟用户看到的 B 不是同一份，
+     先检查后确认这道保护就白设了 */
+  var box = document.getElementById('rsTxt');
+  if(box && box.value != null && String(box.value).trim()){
+    var again = parseBackup(box.value);
+    if(!again.ok){
+      ui.rsParsed = null;
+      ui.rsInfo = { err:'内容变了，请重新点「检查一下」' };
+      renderSheet(); toast('内容变了，重新检查一下'); return;
+    }
+    if(again.data !== ui.rsParsed.data){ ui.rsParsed = again; }
+  }
+  /* 备份可能是老版本、或被人手改过，缺字段就补齐再写：
+     少一个 today 就是白屏，少 settings 就取不到窗口分钟 */
+  var d = ui.rsParsed.data, dft = dataDefaults();
+  Object.keys(dft).forEach(function(k){
+    if(d[k] == null) d[k] = dft[k];
+    else if((k === 'settings' || k === 'today') && typeof d[k] === 'object'){
+      Object.keys(dft[k]).forEach(function(k2){ if(d[k][k2] === undefined) d[k][k2] = dft[k][k2]; });
+    }
+  });
+  d.version = 4;
   try{
-    localStorage.setItem(KEY, JSON.stringify(ui.rsParsed.data));
+    localStorage.setItem(KEY, JSON.stringify(d));
   }catch(e){
     toast('写不进去：浏览器存储满了，或被隐私模式禁用了');
     return;
@@ -2712,8 +2921,8 @@ function sheetAdd(){
 
   /* 自定义输入：盒马买的东西千奇百怪，不能只给固定选项。天数也能自己填 */
   h += '<div class="cuswrap">' +
-       '<input id="cusName" type="text" placeholder="没在列表里？打名字，比如「塔菜」" autocomplete="off" enterkeyhint="done">' +
-       '<div class="cusdays"><input id="cusDays" type="number" min="1" max="90" inputmode="numeric" value="' + ui.addDays + '"><span>天</span></div>' +
+       '<input id="cusName" type="text" placeholder="没在列表里？打名字，比如「塔菜」" autocomplete="off" enterkeyhint="done" value="' + esc(ui.cusName || '') + '">' +
+       '<div class="cusdays"><input id="cusDays" type="number" min="1" max="90" inputmode="numeric" value="' + (ui.cusDays == null ? ui.addDays : esc(ui.cusDays)) + '"><span>天</span></div>' +
        '<button data-act="cusAdd">加入</button></div>';
   h += '<div style="font-size:11.5px;color:#A9A398;margin-top:7px;line-height:1.6">' +
        '中间是天数，1–90 随便填；同名食材下次自动沿用你填过的天数。</div>';
@@ -3026,6 +3235,7 @@ document.addEventListener('click', function(e){
       save();
       toast(String(nm).trim() + ' 记进冰箱了，保质 ' + shelfDays(newId, String(nm).trim()) + ' 天');
       ui.addGrp = '自定义';
+      ui.cusName = ''; ui.cusDays = null;      /* 加完清空，别把上一笔的名字留给下一笔 */
       renderSheet(); render();
     }
   }
@@ -3038,7 +3248,9 @@ document.addEventListener('click', function(e){
   else if(act === 'invAdd'){
     invAdd(id, 1); save();
     toast((ingName(id)) + ' ＋1，保质 ' + shelfDays(id) + ' 天');
-    renderSheet();
+    /* 面板是固定遮罩，盖着看不见底下的列表；只重画面板的话，
+       关掉之后露出来的是加减之前的库存——加的三样像没生效 */
+    renderKeep();
   }
   else if(act === 'invOpen'){ ui.sheet = true; ui.sheetType = 'edit'; ui.editId = id; renderSheet(); }
   else if(act === 'invPlus' || act === 'invMinus'){
@@ -3065,7 +3277,7 @@ document.addEventListener('click', function(e){
   else if(act === 'rsOpen'){ ui.sheetType = 'restore'; ui.rsTxt = ''; ui.rsInfo = null; ui.rsParsed = null; renderSheet(); }
   else if(act === 'rsCheck'){ checkRestore(); }
   else if(act === 'rsApply'){ applyBackup(); }
-  else if(act === 'closesheet'){ ui.sheet = false; renderSheet(); }
+  else if(act === 'closesheet'){ ui.sheet = false; renderKeep(); }
   else if(act === 'win'){ state.settings.window = Number(el.dataset.v); save(); reroll(); }
   else if(act === 'tg'){ var k = el.dataset.k; state.settings[k] = !state.settings[k]; save(); reroll(); }
   else if(act === 'reset'){
@@ -3081,6 +3293,9 @@ document.addEventListener('input', function(e){
   if(t.id === 'f_paste') ui.pasteTxt = t.value;
   else if(t.id === 'f_ingq') ui.ingQ = t.value;
   else if(t.id === 'rsTxt') ui.rsTxt = t.value;
+  /* 这两格输入完常要去点分组，面板会整体重绘；不存起来就等于白打 */
+  else if(t.id === 'cusName') ui.cusName = t.value;
+  else if(t.id === 'cusDays') ui.cusDays = t.value;
 });
 /* 选备份文件：读进来直接走跟粘贴一样的检查 */
 document.addEventListener('change', function(e){
@@ -3090,7 +3305,7 @@ document.addEventListener('change', function(e){
   if(f.size > 4 * 1024 * 1024){ toast('这文件太大了（' + Math.round(f.size / 1024 / 1024) + ' MB），不像备份'); return; }
   try{
     var fr = new FileReader();
-    fr.onload = function(){ ui.rsTxt = String(fr.result || ''); checkRestore(); };
+    fr.onload = function(){ checkRestore(String(fr.result || '')); };
     fr.readAsText(f);
   }catch(err){ toast('这个浏览器读不了文件，改用粘贴'); }
 });
@@ -3144,6 +3359,7 @@ document.addEventListener('keydown', function(e){
     save();
     toast(String(nm).trim() + ' 记进冰箱了，保质 ' + shelfDays(newId, String(nm).trim()) + ' 天');
     ui.addGrp = '自定义';
+    ui.cusName = ''; ui.cusDays = null;
   } else toast('先打个名字');
   renderSheet(); render();
 });
@@ -3429,6 +3645,14 @@ if(location.search.indexOf('test') >= 0){
     if(!document.querySelector) return true;
     var l = document.querySelector('link[rel="manifest"]');
     return !!l && String(l.getAttribute('href')).indexOf('manifest.json') >= 0;
+  })());
+
+  chk('备份统计：天数读的是 history，不是空字段 log', (function(){
+    /* 这条是回归：原来 backupStat 读 d.log，而程序存在 history，导致
+       「N 天记录」永远显示 0，偏偏它就出现在覆盖前的核对面板上 */
+    var st = backupStat({ recipes:[1,2], history:[1,2,3], inventory:[1] });
+    var old = backupStat({ recipes:[], log:{ '2026-01-01':1, '2026-01-02':1 }, inventory:[] });
+    return st.days === 3 && st.dishes === 2 && st.inv === 1 && old.days === 2;
   })());
 
   chk('导入：真的点「检查一下」能认出，并备好「确认覆盖」', (function(){
@@ -3829,10 +4053,28 @@ if(location.search.indexOf('test') >= 0){
     d.n = '番茄炒蛋'; d.author = '爱做饭的姥姥';
     d.src = 'https://www.xiachufang.com/recipe/107202179/';
     ui.draft = d;
+    /* 粘贴发生在编辑器里，这几个输入框是渲染着的，值就是草稿里的值。
+       doPasteParse 开头的 readForm 从这里读回来，不该把它弄丢 */
+    document.getElementById('f_n').value = '番茄炒蛋';
+    document.getElementById('f_author').value = '爱做饭的姥姥';
+    document.getElementById('f_src').value = 'https://www.xiachufang.com/recipe/107202179/';
     document.getElementById('f_paste').value = '番茄炒蛋的做法\n用料\n番茄 2个\n鸡蛋 2个\n做法\n1.切块 2.炒';
     doPasteParse();
     return ui.draft.author === '爱做饭的姥姥' &&
            ui.draft.src === 'https://www.xiachufang.com/recipe/107202179/';
+  })());
+
+  chk('粘贴：认不出菜名时，手打的菜名不会被抹掉', (function(){
+    var d = emptyDraft('fiber'); d._new = 1; d._pasteOpen = 1; d.n = '蒜蓉空心菜';
+    ui.draft = d;
+    document.getElementById('f_n').value = '蒜蓉空心菜';
+    document.getElementById('f_author').value = '';
+    document.getElementById('f_src').value = '';
+    document.getElementById('f_paste').value = '菠菜 200g\n蒜末 少许\n1. 焯水\n2. 炒';
+    doPasteParse();
+    var ok = ui.draft.n === '蒜蓉空心菜';
+    document.getElementById('f_paste').value = '';
+    return ok;
   })());
 
   chk('保存：只写了个菜名也能存下来', (function(){
@@ -3988,7 +4230,7 @@ if(location.search.indexOf('test') >= 0){
     deleteRecipe('x001');
     var gone = !findItem('x001');
     restoreRecipe('x001');
-    var back = !!findItem('x001') && findItem('x001').n === '番茄炒蛋';   /* 删除会连改动一起清掉，恢复回原样 */
+    var back = !!findItem('x001') && findItem('x001').n === '番茄炒蛋（改过）';  /* 只藏不删：恢复要回到删除前的样子，改动不能丢 */
     delete state.edits['x001']; rebuildItems();
     return edited && gone && back;
   })());
@@ -4029,6 +4271,179 @@ if(location.search.indexOf('test') >= 0){
   var cBadTime = {protein:findItem('p07'), fiber:findItem('f02'), carb:findItem('c02')};
   chk('动手超窗口被判违规', !evaluate(cBadTime, todayStr()).ok, evaluate(cBadTime, todayStr()).why);
   state.settings.window = 15;
+
+  /* ===== 回归：2026-11-20 全量审查修掉的问题 ===== */
+  chk('新建：连存两道自建菜不会互相覆盖', (function(){
+    var b = state.recipes.length;
+    var d1 = emptyDraft('fiber'); d1.n = '甲菜'; d1.needs = ['spinach']; saveRecipe(d1);
+    var d2 = emptyDraft('fiber'); d2.n = '乙菜'; d2.needs = ['spinach']; saveRecipe(d2);
+    var ok = state.recipes.length === b + 2 && !!d1.id && !!d2.id && d1.id !== d2.id &&
+             !!findItem(d1.id) && !!findItem(d2.id);
+    state.recipes.length = b; rebuildItems();
+    return ok;
+  })());
+
+  chk('记账：同一天记两次只留一条', (function(){
+    var c = {protein:findItem('p03'), fiber:findItem('f02'), carb:findItem('c11')};
+    state.history.length = 0;
+    state.today.pick = {combo:c, ev:evaluate(c, todayStr())};
+    eat(); eat();
+    var ok = state.history.filter(function(h){ return h.date === todayStr(); }).length === 1;
+    undoTodaysEat(); state.history.length = 0; state.today.pick = null;
+    return ok;
+  })());
+
+  chk('记账：吃完换餐再撤销，库存回到原样', (function(){
+    var snap = function(){
+      var m = {};
+      state.inventory.forEach(function(x){ m[x.id + '@' + x.exp] = x.qty; });
+      return JSON.stringify(m);
+    };
+    var s0 = snap();
+    var c = {protein:findItem('p03'), fiber:findItem('f02'), carb:findItem('c11')};
+    state.today.pick = {combo:c, ev:evaluate(c, todayStr())};
+    eat(); reroll(); undoTodaysEat();
+    var ok = snap() === s0;
+    state.today.pick = null; state.history.length = 0;
+    return ok;
+  })());
+
+  chk('换菜：撞硬约束时不会把今天这顿改坏', (function(){
+    var c = {protein:findItem('p04'), fiber:findItem('f02'), carb:findItem('c12')};
+    state.today.pick = {combo:c, ev:evaluate(c, todayStr())};
+    var before = state.today.pick.combo.fiber.id;
+    var beforeHand = state.today.pick.ev.hand;
+    pickFromLib(findItem('f11'));          /* 虎皮青椒：和 p04 一样要盯锅 */
+    var ok = state.today.pick.combo.fiber.id === before &&
+             state.today.pick.ev.hand === beforeHand;
+    state.today.pick = null;
+    return ok;
+  })());
+
+  chk('库存：补货不会给过期那批续命', (function(){
+    state.inventory.length = 0;
+    state.inventory.push({id:'tomato', qty:1, exp:dstr(-1), added:dstr(-5)});
+    invAdd('tomato', 1);
+    var rows = state.inventory.filter(function(x){ return x.id === 'tomato'; });
+    var ok = rows.length === 2 && rows[0].qty === 1 && invDays(rows[0]) < 0;
+    state.inventory.length = 0;
+    return ok;
+  })());
+
+  chk('库存：常备品不会变成看不见的库存', (function(){
+    state.inventory.length = 0;
+    addCustom('牛奶', 5);
+    var ok = state.inventory.length === 0 && invList().length === 0;
+    state.inventory.length = 0;
+    return ok;
+  })());
+
+  chk('频率：7 天前吃过不算本周', (function(){
+    state.history.length = 0;
+    state.history.push({date:dstr(-7), p:'c13', red:1});
+    var ok = weekCount('c13') === 0 && redCountWeek() === 0;
+    state.history.length = 0;
+    state.history.push({date:dstr(-6), p:'c13'});
+    var ok2 = weekCount('c13') === 1;
+    state.history.length = 0;
+    return ok && ok2;
+  })());
+
+  chk('频率：两周 1 次的菜第 8 天也不会放回来', (function(){
+    state.history.length = 0;
+    state.history.push({date:dstr(-9), f:'c09'});
+    var ev = evaluate({protein:findItem('p01'), fiber:findItem('f02'), carb:findItem('c09')}, todayStr());
+    var ok = !ev.ok && ev.why.indexOf('这两周') >= 0;
+    state.history.length = 0;
+    return ok;
+  })());
+
+  chk('器具：三件不同器具会被判违规（原来这条约束是死代码）', (function(){
+    var byName = function(n){ return ITEMS.filter(function(x){ return x.n.indexOf(n) >= 0; })[0]; };
+    var combo = {protein:byName('煎鸡胸'), fiber:byName('凉拌菠菜'), carb:byName('全麦面包')};
+    var vs = [combo.protein, combo.fiber, combo.carb].map(function(x){ return x && x.vessel; });
+    if(vs.indexOf('pan') < 0 || vs.indexOf('water') < 0 || vs.indexOf('airfryer') < 0) return true;
+    var ev = evaluate(combo, todayStr());
+    return !ev.ok && ev.why.indexOf('器具') >= 0;
+  })());
+
+  chk('解析：整段一行、带「做法：」也能切出用料和步骤', (function(){
+    var p = parseRecipeText('番茄炒蛋 2人份 这是我家常做的一道菜简单快手十分钟就能上桌孩子特别爱吃每次都能吃两碗饭 用料：番茄 2个 鸡蛋 2个 盐 适量 做法：1.番茄切块 2.鸡蛋打散 3.热锅倒油炒蛋盛出');
+    return p && p.n === '番茄炒蛋' && p.needs.length === 2 && p.steps.length === 3;
+  })());
+
+  chk('解析：做法句子不会被当成食材', (function(){
+    var p = parseRecipeText('番茄炒蛋\n用料\n番茄 2个\n鸡蛋 2个\n做法\n把鸡蛋打散，加一点盐\n小火煮两分钟');
+    return p && p.needs.length === 2 && p.steps.length === 2 &&
+           looksLikeIngredient('把番茄切块') === false &&
+           looksLikeIngredient('小火煮两分钟') === false &&
+           looksLikeIngredient('番茄 2个') === true;
+  })());
+
+  chk('解析：步骤里的「准备好所有材料」不会把后面切回用料段', (function(){
+    var p = parseRecipeText('番茄炒蛋\n用料\n番茄 2个\n鸡蛋 2个\n做法\n1. 番茄切块\n2. 鸡蛋打散\n准备好所有材料\n3. 热锅倒油炒蛋');
+    return p && p.steps.length === 4;
+  })());
+
+  chk('解析：没有用料时不会把「装盘」当作者', (function(){
+    var p = parseRecipeText('凉拌黄瓜\n1. 黄瓜拍碎\n2. 装盘');
+    return p && p.author === '' && p.steps.length === 2;
+  })());
+
+  chk('解析：菜名带份量也认得出', (function(){
+    var p = parseRecipeText('番茄炒蛋 2人份\n用料\n番茄 2个\n鸡蛋 2个\n做法\n1. 切块');
+    return p && p.n === '番茄炒蛋';
+  })());
+
+  chk('解析：区间数量「2~3个」认得出', (function(){
+    var p = parseRecipeText('蒜香口蘑\n用料\n口蘑\n2~3个\n做法\n1. 切片\n2. 炒');
+    return p && p.needs.length === 1 && p.unknown.length === 0 && p.steps.length === 2;
+  })());
+
+  chk('解析：序号后接冒号或全角括号也能拆', (function(){
+    return splitSteps('做法：1.切块 2.打散 3.炒').length === 3 &&
+           splitSteps('（1）切块（2）打散（3）炒').length === 3 &&
+           stripStepNo('1）切块') === '切块';
+  })());
+
+  chk('解析：作者名不吞后面的括号', (function(){
+    return pickAuthor('作者：小美（下厨房） 用料') === '小美';
+  })());
+
+  chk('内置：清空作者、取消限量能真的存下去', (function(){
+    var d = draftFrom(findItem('c13'));
+    d.cap = null; d.author = '';
+    saveRecipe(d);
+    var ok = findItem('c13').cap == null && !findItem('c13').author;
+    delete state.edits['c13']; rebuildItems();
+    return ok;
+  })());
+
+  chk('待补录：自己填的没写作者，不认领指明作者的那条', (function(){
+    state.pending = [{n:'番茄炒蛋', author:'五月孤芳'}];
+    var n = dropFilledPending({n:'番茄炒蛋', author:''});
+    var ok = n === 0 && state.pending.length === 1;
+    state.pending = [];
+    return ok;
+  })());
+
+  chk('备料：早上现做的不进「今晚」清单', (function(){
+    var pl = prepList({protein:findItem('p04'), fiber:findItem('f02'), carb:findItem('c07')});
+    return !pl.some(function(x){ return /早上现做/.test(x.text); });
+  })());
+
+  chk('备份：带 inventory 的陌生 JSON 也会被拒绝', (function(){
+    var r = parseBackup('{"inventory":[]}');
+    return !r.ok;
+  })());
+
+  chk('备份：选文件的内容能直接认出，不用先填进粘贴框', (function(){
+    ui.rsTxt = ''; ui.rsParsed = null; ui.rsInfo = null;
+    checkRestore(backupText());
+    var ok = !!ui.rsParsed && ui.rsParsed.ok === 1 && !!ui.rsInfo && ui.rsInfo.ok === 1;
+    ui.rsTxt = ''; ui.rsParsed = null; ui.rsInfo = null;
+    return ok;
+  })());
 
   var pre2 = document.createElement('pre');
   pre2.id = 'diag2';
