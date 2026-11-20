@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>清理旧缓存</title>
+<style>
+  html,body{margin:0;background:#FAF7F0;color:#201E19;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:430px;margin:0 auto;padding:40px 20px}
+  h1{font-size:19px;margin:0 0 6px;font-weight:650}
+  .sub{font-size:13px;color:#8A8478;line-height:1.7;margin-bottom:18px}
+  pre{background:#fff;border:1px solid #E9E4D9;border-radius:14px;padding:14px;
+    font-size:12px;line-height:1.75;color:#4A463D;white-space:pre-wrap;word-break:break-all;min-height:120px}
+  a{display:inline-block;margin-top:16px;padding:11px 18px;border-radius:12px;
+    background:#3C6B4F;color:#fff;text-decoration:none;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>清理旧缓存</h1>
+  <div class="sub">把手机上这个站点残留的旧页面、旧 service worker 全删掉。<b>不会动你的菜谱和记录</b>（那些是另一份存储）。</div>
+  <pre id="log">开始…</pre>
+  <a href="./index.html" id="go" style="display:none">进应用</a>
+</div>
+<script>
+(function(){
+  var log = document.getElementById('log');
+  function say(t){ log.textContent += t + '\n'; }
+  log.textContent = '';
+
+  function done(){
+    say('—— 清完了 ——');
+    document.getElementById('go').style.display = 'inline-block';
+    setTimeout(function(){ location.replace('./index.html?clean=' + Date.now()); }, 1500);
+  }
+
+  if(!('serviceWorker' in navigator)){
+    say('这个浏览器没有 service worker，问题在浏览器自己的网页缓存里。');
+    say('请在浏览器设置里清除「缓存的图片和文件」后重开。');
+    done();
+    return;
+  }
+
+  navigator.serviceWorker.getRegistrations().then(function(rs){
+    say('找到 ' + rs.length + ' 个 service worker');
+    var ps = rs.map(function(r){
+      return r.unregister().then(function(){ say('已注销一个'); });
+    });
+    return Promise.all(ps);
+  }).then(function(){
+    if(!window.caches) return;
+    return caches.keys().then(function(ks){
+      say('找到 ' + ks.length + ' 份缓存：' + (ks.join('、') || '无'));
+      return Promise.all(ks.map(function(k){
+        return caches.delete(k).then(function(){ say('已删 ' + k); });
+      }));
+    });
+  }).then(done).catch(function(e){
+    say('出错了：' + (e && e.message ? e.message : e));
+    say('请手动清除浏览器缓存后再试。');
+    done();
+  });
+})();
+</script>
+</body>
+</html>
