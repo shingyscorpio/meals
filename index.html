@@ -423,7 +423,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 15:54';
+var BUILD = '2026-11-21 21:55';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -473,9 +473,10 @@ state.edits = state.edits || {};
 state.hidden = state.hidden || [];
 state.pending = state.pending || [];
 state.extraIng = state.extraIng || {};
-/* 老数据的自定义食材、旧分类名，在这里一次性搬进新结构（幂等，重复跑没事） */
-migrateIngs();
-rebuildItems();
+/* 老数据的自定义食材、旧分类名要搬进新结构（幂等，重复跑没事）。
+   但**不能在这里跑**：matchIng → isSeasoning 要读 SEASON_WORDS / ING_ALIAS，
+   而那几个词表是 var，此刻还没赋值（undefined.some 直接抛错，整个脚本中途死掉，
+   页面就白屏、按钮全不响应）。执行点挪到词表定义完之后，见 ING_UNIT 下方。 */
 
 function dataDefaults(){
   return {
@@ -599,6 +600,14 @@ function matchIng(raw){
    于是「把鸡蛋打散，加一点盐」「小火煮两分钟」都被当成食材，
    而 matchIng 是子串匹配，句子里的「鸡蛋」还会被真的塞进用料表。 */
 var ING_UNIT = '个根颗瓣片勺把只条克斤块袋包盒瓶罐束张杯碗撮朵棵段头匙';
+
+/* 老数据搬家 + 把菜谱池子填起来。
+   放在这里是因为它是第一处「词表（ING / SHELF / SEASON_WORDS / ING_ALIAS）都已赋值」
+   的顶层位置：再靠前，migrateIngs 里会走到 matchIng → isSeasoning，
+   读到还是 undefined 的 SEASON_WORDS 就抛错，整页白屏且按钮不响应。 */
+migrateIngs();
+rebuildItems();
+
 function looksLikeIngredient(L){
   var s = String(L || '').trim();
   if(!s || s.length > 24) return false;
