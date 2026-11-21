@@ -395,7 +395,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-20 23:17';
+var BUILD = '2026-11-21 13:20';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -1576,6 +1576,8 @@ function saveRecipe(d){
   if(d.red) item.red = 1;
   if(d.fiber) item.fiber = 1;
   if(d.ext) item.ext = 1;
+  /* key 是「这道菜从包里来」的凭证。编辑一次就丢的话，下次装包会当成新菜再加一条 */
+  if(d.key) item.key = d.key;
   var hit = -1;
   state.recipes.forEach(function(x, k){ if(x.id === d.id) hit = k; });
   if(hit >= 0) state.recipes[hit] = item; else state.recipes.push(item);
@@ -2556,8 +2558,8 @@ function sheetSettings(){
   h += '<div style="margin-top:18px;border-top:1px solid #E7E2D7;padding-top:14px">' +
        '<div style="font-size:13px;font-weight:500;margin-bottom:4px">菜谱包</div>' +
        '<div style="font-size:12px;color:#A9A398;line-height:1.7;margin-bottom:9px">' +
-       '装一份现成的菜谱（示例 + 补录，共 51 道）。库里已经有的按菜名跳过，不会重复，也不会覆盖你改过的。</div></div>' +
-       '<button class="btn btn-ghost" data-act="seedAdd" style="width:100%;font-size:14px">装菜谱包</button>';
+       '示例和补录都在这一份里。装库时只往后加，<b>不会覆盖你改过的</b>；已经有的（哪怕你改了名字）会自动跳过。</div></div>' +
+       '<button class="btn btn-ghost" data-act="seedAdd" style="width:100%;font-size:14px">装最新菜谱</button>';
   if(ui.setMsg){
     h += '<div class="impinfo" style="margin-top:9px">' + ui.setMsg + '</div>';
   }
@@ -2577,27 +2579,45 @@ function sheetSettings(){
 
 /* 把一份菜谱包并进当前库：按菜名去重，id 撞了加后缀。
    只加不覆盖——用户改过的菜不能因为「装个包」被冲掉 */
+/* 一份菜谱在包里的身份证。菜名是给人的，会被改；key 是给机器认的，跟着这道菜走。
+   有下厨房链接就用它的编号，没有就用「菜名|作者」兜底 */
+function packKey(it){
+  if(it && it.key) return String(it.key);
+  /* 老数据没有 key，从来源链接里现推一个——比菜名稳，改了名也认得出来 */
+  var s = String((it && it.src) || '');
+  var m = /xiachufang\.com\/recipe\/(\d+)/.exec(s);
+  if(m) return 'xc:' + m[1];
+  return 'nm:' + String((it && it.n) || '').trim();
+}
+
 function mergePack(list){
-  var have = {}, used = {};
+  var haveKey = {}, haveName = {}, used = {};
   state.recipes.forEach(function(r){
-    if(r && r.n) have[r.n] = 1;
-    if(r && r.id) used[r.id] = 1;
+    if(!r) return;
+    haveKey[packKey(r)] = 1;
+    if(r.n) haveName[r.n] = 1;
+    if(r.id) used[r.id] = 1;
   });
-  var added = 0, dup = 0;
+  /* 装包前留一份快照。逻辑再稳也架不住意外，留一份总比没有强 */
+  try{ localStorage.setItem(KEY + '.prepack', JSON.stringify(state)); }catch(e){}
+  var added = 0, dup = 0, names = [];
   (list || []).forEach(function(src){
     if(!src || !src.n) return;
-    if(have[src.n]){ dup++; return; }
+    /* 两个键都查：改了名字的认 key，手工粘来的（没有 key）认名字 */
+    if(haveKey[packKey(src)] || haveName[src.n]){ dup++; return; }
     var it = JSON.parse(JSON.stringify(src));
     var base = it.id || ('m' + Date.now().toString(36) + added);
     var id = base, k = 2;
     while(used[id]){ id = base + '_' + k; k++; }
     it.id = id;
-    used[id] = 1; have[it.n] = 1;
+    used[id] = 1;
+    haveKey[packKey(it)] = 1;
+    haveName[it.n] = 1;
     state.recipes.push(normItem(it));
-    added++;
+    added++; names.push(it.n);
   });
   rebuildItems(); save();
-  return { added:added, dup:dup, total:ITEMS.length };
+  return { added:added, dup:dup, total:ITEMS.length, names:names };
 }
 
 function getJSON(url, ok, err){
@@ -2627,9 +2647,14 @@ function loadPack(url, label){
       renderSheet(); return;
     }
     var r = mergePack(list);
-    ui.setMsg = '装好了：新增 <b>' + r.added + '</b> 道' +
-                (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
-                '。现在一共 ' + r.total + ' 道。';
+    if(!r.added){
+      ui.setMsg = '没有新的：包里 ' + r.dup + ' 道你都已经有了。现在一共 ' + r.total + ' 道。';
+    } else {
+      ui.setMsg = '装好了：新增 <b>' + r.added + '</b> 道' +
+                  '（' + r.names.join('、') + '）' +
+                  (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
+                  '。现在一共 ' + r.total + ' 道。';
+    }
     renderSheet();
   }, function(e){
     ui.setMsg = '取不到菜谱包（' + (e && e.message ? e.message : '未知原因') + '）。检查网络后再点一次。';
@@ -3603,6 +3628,58 @@ if(location.search.indexOf('test') >= 0){
     var r = mergePack([]);
     var out = r.added === 0 && state.recipes.length === before;
     state.recipes = bak; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：菜名被你改过，也不会重复加一条', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'a1', key:'xc:104697207', n:'手撕包菜（少油版）', cat:'fiber',
+                       hand:9, wall:9, fire:'watch', vessel:'pan', needs:['cabbage'],
+                       taste:[0,0,0], m:'我改过的', prep:[] }];
+    state.hidden = []; rebuildItems();
+    var r = mergePack([{ id:'p01', key:'xc:104697207', n:'手撕包菜', cat:'fiber',
+                         hand:8, wall:9, needs:['cabbage'], m:'包里的' }]);
+    /* key 对上了 → 跳过；库里还是我改的那一版，名字和步骤都没被动 */
+    var out = r.added === 0 && r.dup === 1 && ITEMS.length === 1 &&
+              ITEMS[0].n === '手撕包菜（少油版）' && ITEMS[0].m === '我改过的';
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('编辑保存后 key 还在（不然下次装包会重复）', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = []; state.hidden = []; rebuildItems();
+    var d = emptyDraft('fiber');
+    d.id = 'k1'; d.key = 'xc:1'; d.n = '测试菜'; d.needs = ['egg']; d.m = '1. 做';
+    saveRecipe(d);
+    var got = findItem('k1');
+    var out = !!got && got.key === 'xc:1';
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：你删掉的菜不会自己长回来', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'d1', key:'xc:9', n:'删掉的菜', cat:'fiber', hand:5, wall:5,
+                       needs:[], taste:[0,0,0], m:'', prep:[] }];
+    state.hidden = ['d1']; rebuildItems();
+    var before = ITEMS.length;
+    var r = mergePack([{ id:'p9', key:'xc:9', n:'删掉的菜', cat:'fiber', hand:5, wall:5,
+                         needs:[], taste:[0,0,0], m:'', prep:[] }]);
+    var out = r.added === 0 && ITEMS.length === before;
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：手工粘过的菜（没有 key）不会被重复加', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'m1', n:'番茄炒蛋', cat:'protein', hand:5, wall:8, fire:'watch',
+                       vessel:'pan', needs:['egg','tomato'], taste:[0,0,0], m:'我粘的', prep:[] }];
+    state.hidden = []; rebuildItems();
+    var r = mergePack([{ id:'p02', key:'xc:777', n:'番茄炒蛋', cat:'protein', hand:5, wall:8,
+                         needs:['egg'], m:'包里的' }]);
+    var out = r.added === 0 && ITEMS.length === 1 && ITEMS[0].m === '我粘的';
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
     return out;
   })());
 
