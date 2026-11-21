@@ -395,7 +395,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 14:48';
+var BUILD = '2026-11-21 15:21';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -1833,15 +1833,19 @@ function evaluate(combo, date, opts){
   /* 脂肪是加料，不参与硬约束与打分；只用三道菜来判定 */
   var slots = [combo.protein, combo.fiber, combo.carb].filter(Boolean);
   var hand = slots.reduce(function(a,x){ return a + x.hand; }, 0);
+  /* force = 人点名要这道菜。这时不返回失败，而是把违规全收齐往下算：
+     界面要显示动手分钟、要洗几件锅，光一个 why 是渲染不出来的 */
+  var force = !!(opts && opts.force);
+  var viol = [];
 
   /* 硬约束 1：纤维必须有一份（蛋白自带纤维可顶替） */
-  if(!(combo.fiber || slots.some(function(x){ return x.fiber; }))) return {ok:false, why:'没有纤维'};
+  if(!(combo.fiber || slots.some(function(x){ return x.fiber; }))) viol.push('没有纤维');
 
   /* 硬约束 2：同一时刻只能一道要盯锅的 */
-  if(slots.filter(function(x){ return x.fire === 'watch'; }).length > 1) return {ok:false, why:'两道盯锅'};
+  if(slots.filter(function(x){ return x.fire === 'watch'; }).length > 1) viol.push('两道都要盯锅');
 
   /* 硬约束 3：动手时间不能超过窗口 */
-  if(hand > win) return {ok:false, why:'动手超时'};
+  if(hand > win) viol.push('动手 ' + hand + ' 分钟，超过 ' + win + ' 分钟窗口');
 
   /* 硬约束 4：器具 ≤ 2 件（洗锅也算时间）
      原来只数「有没有水锅 + 有没有炒锅」，两次自增最大就是 2，
@@ -1855,15 +1859,15 @@ function evaluate(combo, date, opts){
     vs[v] = 1;
   });
   var pots = Object.keys(vs).length;
-  if(pots > 2) return {ok:false, why:'器具超过 2 件'};
+  if(pots > 2) viol.push('器具超过 2 件，要洗 ' + pots + ' 件');
 
   /* 硬约束 5：同一道菜 7 天内不重复；同一主料 3 天内不重复 */
   for(var i = 0; i < slots.length; i++){
     var it = slots[i];
     var d = eatenDaysAgo(it.id);
-    if(d !== null && d < 7) return {ok:false, why:it.n + ' 7 天内吃过'};
+    if(d !== null && d < 7) viol.push(it.n + ' 7 天内吃过');
     var ds = stapleDaysAgo(it.staple);
-    if(ds !== null && ds < 3) return {ok:false, why:it.staple + ' 主料 3 天内用过'};
+    if(ds !== null && ds < 3) viol.push(it.staple + ' 主料 3 天内用过');
   }
 
   /* 硬约束 6：频率上限。cap 是「每周几次」，0.5 表示两周 1 次。
@@ -1875,10 +1879,14 @@ function evaluate(combo, date, opts){
       var span = s2.cap >= 1 ? 7 : Math.round(7 / s2.cap);
       var lim = s2.cap >= 1 ? s2.cap : 1;
       if(weekCount(s2.id, span) >= lim){
-        return {ok:false, why:s2.n + (s2.cap >= 1 ? ' 本周次数已满' : ' 这两周已经排过了')};
+        viol.push(s2.n + (s2.cap >= 1 ? ' 本周次数已满' : ' 这两周已经排过了'));
       }
     }
   }
+
+  /* 不是强制模式就按老规矩判不合格：自动推荐只排合规的组合，一条都不放宽。
+     强制模式继续往下走，把分数、动手分钟、器具数一起算出来给界面用 */
+  if(!force && viol.length) return {ok:false, why:viol[0], viol:viol};
 
   /* ---------- 打分 ---------- */
   var seen = {}, needIds = [];
@@ -1921,7 +1929,8 @@ function evaluate(combo, date, opts){
   s += TASTE_W * taste.pen;
 
   return {
-    ok:true, score:s, hand:hand, pots:pots,
+    ok: viol.length === 0, why: viol.join('、'), viol: viol,
+    score:s, hand:hand, pots:pots,
     watch: slots.filter(function(x){ return x.fire === 'watch'; }).length,
     missing: missing, expiring: expiring, gap: gap, taste: taste
   };
@@ -1940,7 +1949,7 @@ function tastePenalty(slots){
   return {pen:p, hits:hits};
 }
 
-function enumerate(date, allowWk){
+function enumerate(date, allowWk, allowViol){
   var out = [];
   /* 工作日只从工作日菜里排。这道闸设在候选池，不设在打分里——
      打分能让周末菜排上来，也能让它们挤掉仅有的几个快手菜 */
@@ -1964,8 +1973,8 @@ function enumerate(date, allowWk){
         } else if(lk.fiber){ continue; }
         {
           var combo = {protein:P[i], fiber:f, carb:C[j]};
-          var ev = evaluate(combo, date, {wk:!!allowWk});
-          if(ev.ok) out.push({combo:combo, ev:ev});
+          var ev = evaluate(combo, date, {wk:!!allowWk, force:!!allowViol});
+          if(ev.ok || allowViol) out.push({combo:combo, ev:ev});
         }
       }
     }
@@ -1984,7 +1993,23 @@ function enumerate(date, allowWk){
 
 function recommend(allowWk){
   var wk = (allowWk == null) ? weekendMode() : !!allowWk;
+  /* 先把你锁住的（自己点名要的）记下来：下面几层兜底会清空 locks，
+     清掉之后再想恢复就没处找了 */
+  var lk0 = {};
+  Object.keys(state.today.locks || {}).forEach(function(k){ lk0[k] = state.today.locks[k]; });
   var list = enumerate(todayStr(), wk);
+
+  /* 第二层：你自己点名要的那道菜本身就撞规矩（7 天内吃过、两道盯锅），
+     于是「锁住它」的组合一个都过不了校验。这时不能把你点的那道顺手换掉——
+     保住你的选择，其余的放宽规矩凑一份。
+     必须排在「清空重排」之前：清掉 locks 再找，一定能找到合规的一份，
+     但那份里已经没有你要的菜了，等于偷偷把你的选择抹掉 */
+  if(!list.length && (lk0.protein || lk0.fiber || lk0.carb)){
+    state.today.locks = lk0;
+    list = enumerate(todayStr(), wk, true);
+    if(list.length) toast('你定的那道留着，其余按放宽的规矩排');
+  }
+
   if(!list.length){
     state.today.skipped = [];
     state.today.locks = {};
@@ -2089,7 +2114,7 @@ function morningPlan(combo){
 var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:null, addGrp:'叶菜', addDays:3,
            draft:null, impMsg:null, pasteTxt:'', ingQ:'',
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
-           bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null,
+           bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null };
 (function(){
   var t = (location.hash || '').replace('#','');
@@ -2145,14 +2170,41 @@ function pickFromLib(it){
   var c = {protein:c0.protein, fiber:c0.fiber, carb:c0.carb};
   c[cat] = it;
   if(cat === 'protein' && it.fiber){ c.fiber = null; }
-  var ev = evaluate(c, todayStr());
-  if(!ev.ok){ toast('这样换会撞硬约束：' + ev.why); return; }
+
+  /* 先按「强制」算一遍：合规就直接落地，不合规也只是把违规列出来。
+     规矩是给自动排菜用的，人自己点名要吃的东西，只提醒、不禁止 */
+  var ev = evaluate(c, todayStr(), {force:true});
+  if(ev.ok){ applyPick(c, ev, 0, cat); return; }
+  ui.clash = {combo:c, ev:ev, cat:cat, name:it.n};
+  ui.sheetType = 'clash';
+  ui.sheet = true;
+  renderSheet();
+}
+
+function clashConfirm(){
+  var q = ui.clash;
+  ui.clash = null;
+  ui.sheetType = 'settings';
+  if(q) applyPick(q.combo, q.ev, 1, q.cat); else renderSheet();
+}
+function clashCancel(){
+  ui.clash = null; ui.sheet = false; ui.sheetType = 'settings'; renderSheet();
+}
+
+/* 真正把这顿饭换掉。forced=1 记下「这份是人不顾规矩自己定的」 */
+function applyPick(c, ev, forced, cat){
   if(state.today.eaten) undoConsumed();   /* 餐变了，原来那次记账作废，库存还原 */
+  var c0 = state.today.pick.combo;
   if(c0[cat]) state.today.skipped.push(c0[cat].id);
   state.today.pick = {combo:c, ev:ev};
-  state.today.locks[cat] = it.id;
-  save(); toast('换成 ' + it.n + ' 了');
+  if(forced) state.today.pick.forced = 1;
+  state.today.locks[cat] = c[cat] ? c[cat].id : null;
+  save();
+  toast(forced ? ('行，就按你选的排 ' + (c[cat] ? c[cat].n : '') + '') : ('换成 ' + (c[cat] ? c[cat].n : '') + ' 了'));
+  ui.sheet = false;
+  ui.sheetType = 'settings';   /* 面板关了就把类型复位，免得下次打开串成这一页 */
   render();
+  renderSheet();
 }
 
 function eat(){
@@ -2284,6 +2336,15 @@ function viewToday(){
   h += '<div class="card">';
   h += '<div class="card-h"><span>今天给你排好了</span><b>' + ev.hand + '′ 动手</b></div>';
   h += '<div class="hint" style="margin:-3px 0 9px">' + wkHint() + '</div>';
+
+  /* 自己硬点进来的那道菜：提醒还在，但不拦。不说清楚的话，
+     第二天看到「7 天内吃过」会以为程序算错了 */
+  if(pick.forced){
+    var vv = (ev && ev.viol) || [];
+    h += '<div class="pendbar" style="cursor:default">' +
+         '这份是你自己定的' + (vv.length ? '，跟规矩有冲突：' + vv.map(function(v){ return esc(v); }).join('、') : '') +
+         '。<br>想吃就吃，改主意点下面的「换」。</div>';
+  }
 
   var slotsDef = [
     {k:'protein', label:'蛋白'},
@@ -2595,9 +2656,30 @@ function renderSheet(){
   else if(ui.sheetType === 'pending') h = sheetPending();
   else if(ui.sheetType === 'backup') h = sheetBackup();
   else if(ui.sheetType === 'restore') h = sheetRestore();
+  else if(ui.sheetType === 'clash') h = sheetClash();
   else h = sheetSettings();
   box.innerHTML = h;
   document.getElementById('sheet').classList.toggle('on', ui.sheet);
+}
+
+/* 自己选菜撞了硬约束：只提醒，不拦。自动推荐那边仍然只排合规组合，
+   但人一旦点名要某道菜，决定权在人手上 */
+function sheetClash(){
+  var q = ui.clash;
+  if(!q) return '<h3>已取消</h3><div style="margin-top:14px">' +
+    '<button class="btn btn-ghost" data-act="closesheet" style="width:100%">关闭</button></div>';
+  var viol = (q.ev && q.ev.viol) || [];
+  var h = '<h3>「' + esc(q.name) + '」不太合规矩</h3>';
+  h += '<div class="impinfo" style="background:#FAF3E4;border-color:#EDE2C8;color:#8A6A2E;line-height:1.7">' +
+       '自动排菜会避开这些，免得天天撞。你自己想吃就吃——确认一下就排上，不影响别的东西。' +
+       (viol.length ? '<div style="margin-top:7px">' +
+         viol.map(function(v){ return '· ' + esc(v); }).join('<br>') + '</div>' : '') +
+       '</div>';
+  h += '<div class="actions">' +
+       '<button class="btn btn-ghost" data-act="clashNo" style="flex:1;font-size:14px">算了</button>' +
+       '<button class="btn btn-primary" data-act="clashYes" style="flex:1;font-size:14px">就要这道</button>' +
+       '</div>';
+  return h;
 }
 
 function sheetSettings(){
@@ -3077,6 +3159,8 @@ document.addEventListener('click', function(e){
   else if(act === 'undoEat'){ undoTodaysEat(); }
   else if(act === 'libcat'){ ui.libCat = el.dataset.cat; render(); }
   else if(act === 'use'){ pickFromLib(findItem(id)); }
+  else if(act === 'clashYes'){ clashConfirm(); }
+  else if(act === 'clashNo'){ clashCancel(); }
   else if(act === 'addslot'){ ui.tab = 'lib'; ui.libCat = el.dataset.cat; render(); }
 
   /* 菜谱 */
@@ -4594,16 +4678,109 @@ if(location.search.indexOf('test') >= 0){
     return ok;
   })());
 
-  chk('换菜：撞硬约束时不会把今天这顿改坏', (function(){
+  /* ---------- 自己选菜撞硬约束：只提醒，不禁止 ---------- */
+  /* 规矩是给自动排菜用的。人自己点名的菜，问一句就好，不能不让人选 */
+  var CLASH = function(){
     var c = {protein:findItem('p04'), fiber:findItem('f02'), carb:findItem('c12')};
     state.today.pick = {combo:c, ev:evaluate(c, todayStr())};
+    state.today.skipped = []; state.today.locks = {}; state.today.eaten = null;
+    ui.clash = null; ui.sheet = false; ui.sheetType = 'settings';
+    return c;
+  };
+
+  chk('自己选菜撞约束：先问一句，不直接改也不拒绝', (function(){
+    var c = CLASH();
     var before = state.today.pick.combo.fiber.id;
-    var beforeHand = state.today.pick.ev.hand;
     pickFromLib(findItem('f11'));          /* 虎皮青椒：和 p04 一样要盯锅 */
-    var ok = state.today.pick.combo.fiber.id === before &&
-             state.today.pick.ev.hand === beforeHand;
+    var ok = ui.sheetType === 'clash' && !!ui.clash && ui.sheet === true &&
+             state.today.pick.combo.fiber.id === before &&
+             state.today.pick.forced !== 1;
     state.today.pick = null;
     return ok;
+  })());
+
+  chk('确认之后才换，并记下「这份是你自己定的」', (function(){
+    CLASH();
+    pickFromLib(findItem('f11'));
+    var asked = !!ui.clash && ui.clash.name === findItem('f11').n;
+    clashConfirm();
+    var ev = state.today.pick.ev;
+    var ok = asked &&
+             state.today.pick.combo.fiber.id === findItem('f11').id &&
+             state.today.pick.forced === 1 &&
+             ui.clash === null && ui.sheet === false &&
+             (ev.viol || []).length > 0 &&
+             typeof ev.hand === 'number' && typeof ev.score === 'number';
+    state.today.pick = null;
+    return ok;
+  })());
+
+  chk('说「算了」就什么都没发生', (function(){
+    CLASH();
+    var before = state.today.pick.combo.fiber.id;
+    var beforeHand = state.today.pick.ev.hand;
+    var nSkip = state.today.skipped.length;
+    pickFromLib(findItem('f11'));
+    clashCancel();
+    var ok = state.today.pick.combo.fiber.id === before &&
+             state.today.pick.ev.hand === beforeHand &&
+             !state.today.pick.forced &&
+             state.today.skipped.length === nSkip &&
+             ui.clash === null && ui.sheet === false;
+    state.today.pick = null;
+    return ok;
+  })());
+
+  chk('强制模式下违规不空，但分数、动手分钟照样算得出来', (function(){
+    var c = {protein:findItem('p04'), fiber:findItem('f11'), carb:findItem('c12')};
+    var ev = evaluate(c, todayStr(), {force:true});
+    var hard = evaluate(c, todayStr());
+    /* 推荐那边必须还是一条都不放宽：不合格就只回 ok/why，不参与排序 */
+    return !ev.ok && (ev.viol || []).length > 0 &&
+           typeof ev.hand === 'number' && typeof ev.pots === 'number' &&
+           typeof ev.score === 'number' &&
+           !hard.ok && typeof hard.score === 'undefined';
+  })());
+
+  chk('自己选的菜，今日页会把冲突写出来', (function(){
+    CLASH();
+    pickFromLib(findItem('f11'));
+    clashConfirm();
+    var h = viewToday();
+    var ok = h.indexOf('这份是你自己定的') >= 0 && h.indexOf('两道都要盯锅') >= 0;
+    state.today.pick = null;
+    return ok;
+  })());
+
+  chk('换另一格时，你点名的那道不会被顺手换掉', (function(){
+    CLASH();
+    /* 让虎皮青椒「2 天前吃过」：这道菜本身就是硬违规，
+       不管配什么蛋白都过不了 7 天校验，才能真正试出「保住选择」 */
+    var h0 = state.history.slice();
+    state.history = [{date:dstr(-2), p:null, f:'f11', c:null}];
+    pickFromLib(findItem('f11'));
+    var asked = !!ui.clash;
+    clashConfirm();
+    var beforeP = state.today.pick.combo.protein.id;
+    swapSlot('protein');            /* 只换蛋白格 */
+    var ok = asked && state.today.pick.combo.fiber &&
+             state.today.pick.combo.fiber.id === 'f11' &&
+             state.today.pick.combo.protein.id !== beforeP;
+    state.history = h0; state.today.pick = null; state.today.locks = {}; state.today.skipped = [];
+    return ok;
+  })());
+
+  chk('自己选的菜照样能记账，库存照扣、能撤销', (function(){
+    CLASH();
+    pickFromLib(findItem('f11'));
+    clashConfirm();
+    var n = state.history.length;
+    eat();
+    var ate = state.history.length === n + 1 && !!state.today.eaten;
+    undoTodaysEat();
+    var back = state.history.length === n && !state.today.eaten;
+    state.today.pick = null;
+    return ate && back;
   })());
 
   chk('库存：补货不会给过期那批续命', (function(){
