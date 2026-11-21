@@ -93,6 +93,25 @@
   .cuswrap .cusdays input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .cuswrap .cusdays input:focus{outline:0}
   .cusdays span{flex:0 0 auto;font-size:12px;color:#9A9488}
+  /* 打名字时的实时提示：对上已有食材 / 会新建到哪一类 */
+  .cushint{font-size:11.5px;color:#8A8478;margin-top:8px;line-height:1.65;min-height:15px}
+  .cushint .dim{color:#A9A398}
+  .cuscat{display:flex;align-items:baseline;justify-content:space-between;
+    font-size:12px;color:#8A8478;margin:14px 4px 6px}
+  .chip.mgr{border-style:dashed;color:#6B665B}
+  /* 分类管理 */
+  .catrow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #F4F0E8}
+  .catrow:last-child{border-bottom:0}
+  .catrow .ib{flex:1;min-width:0}
+  .catrow .nm{font-size:14px;font-weight:540}
+  .catrow .mt{font-size:11px;color:#A9A398;margin-top:1px}
+  .catrow input{flex:1;min-width:0;border:1px solid #E7E2D7;background:#fff;border-radius:10px;
+    padding:8px 10px;font-family:inherit;font-size:14px;color:#201E19;-webkit-appearance:none}
+  .catrow input:focus{outline:0;border-color:#2F5D46}
+  .catrow button{flex:0 0 auto;border:0;background:#2F5D46;color:#fff;border-radius:10px;
+    padding:8px 13px;font-family:inherit;font-size:13px;cursor:pointer}
+  .catrow button.ghost{background:#fff;border:1px solid #E7E2D7;color:#5E5A50}
+  .catrow button.ghost.del{color:#A0503A}
 
   /* 保质期设置 */
   .shgrp{font-size:12px;color:#8A8478;margin:16px 4px 2px;letter-spacing:.04em}
@@ -167,6 +186,11 @@
   .autoline .ghost{border:0;background:transparent;color:#3C6B4F;font-size:12.5px;
     padding:2px 4px;font-family:inherit;cursor:pointer}
   .ingchip b{font-weight:400;color:rgba(255,255,255,.65);margin-left:5px}
+  /* 用料和冰箱对不对得上：缺的标出来，不用自己去冰箱页一项项比 */
+  .ingchip.miss{background:#FCF6F0;border-color:#EBD9CE;color:#8A5A3C}
+  .ingchip.miss b{color:rgba(138,90,60,.5)}
+  .ingchip i{font-style:normal;font-size:10px;margin-left:4px;color:#B0453A}
+  .ingstat{font-size:11.5px;color:#A9A398;margin-top:7px;line-height:1.6}
   .ingchip.add{border-style:dashed;color:#3C6B4F;background:#fff}
   .padwrap{margin-top:8px}
   .padwrap input{width:100%;box-sizing:border-box;border:1px solid #E7E2D7;border-radius:10px;
@@ -371,7 +395,10 @@ var SHELF = {
   porkBelly:{g:'肉类',d:2,note:'冷藏 2 天，超了切小块冷冻'},
   bacon:{g:'肉类',d:5,note:'未开封按包装日期；开封 3 天内用完'}
 };
-var GROUPS = ['叶菜','果菜','菌菇','根茎','肉类','豆制品','水果','自定义'];
+/* 分类不再写死。默认八类只是给的起点，你自己加、改名、删都行（存 state.groups）。
+   原来那个「自定义」类废掉了——自己加的东西现在也有正经分类，
+   不会再一股脑堆进「自定义」里找不着。 */
+var DEFAULT_GROUPS = ['叶菜','果菜','菌菇','根茎','肉类','豆制品','水果','其他'];
 
 /* 常备品：不记库存，视为「家里总有」。采购清单和库存打分都不算它。 */
 var PANTRY = ['egg','yogurt','fruit','milk','mixedGrain','oats','bread','mantou','wonton',
@@ -396,7 +423,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 15:30';
+var BUILD = '2026-11-21 15:54';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -446,6 +473,8 @@ state.edits = state.edits || {};
 state.hidden = state.hidden || [];
 state.pending = state.pending || [];
 state.extraIng = state.extraIng || {};
+/* 老数据的自定义食材、旧分类名，在这里一次性搬进新结构（幂等，重复跑没事） */
+migrateIngs();
 rebuildItems();
 
 function dataDefaults(){
@@ -456,6 +485,7 @@ function dataDefaults(){
     history: [],
     recipes: [], edits:{}, hidden:[], extraIng:{}, pending: [],
     shelf:{}, shelfName:{},
+    ings:{}, ingG:{}, groups: DEFAULT_GROUPS.slice(),
     today: { date:'', skipped:[], locks:{}, pick:null, eaten:null, consumed:null }
   };
 }
@@ -547,7 +577,9 @@ function isSeasoning(name){
 function matchIng(raw){
   var t = String(raw || '').replace(/[（(].*?[)）]/g, '').replace(/\s+/g, '').replace(/[、，,。.]$/, '').trim();
   if(!t || isSeasoning(t)) return null;
-  var keys = Object.keys(ING).concat(Object.keys(state.extraIng || {}));
+  var keys = Object.keys(ING);
+  Object.keys(state.ings || {}).forEach(function(k){ if(keys.indexOf(k) < 0) keys.push(k); });
+  Object.keys(state.extraIng || {}).forEach(function(k){ if(keys.indexOf(k) < 0) keys.push(k); });
   var i, hit = null, hitLen = 0;
   for(i = 0; i < keys.length; i++){ if(ingName(keys[i]) === t) return keys[i]; }
   if(ING_ALIAS[t]) return ING_ALIAS[t];
@@ -1121,8 +1153,10 @@ function arow(label, act, opts, cur){
 
 function allIngIds(){
   var out = Object.keys(SHELF).concat(PANTRY);
-  Object.keys(ING).forEach(function(k){ if(out.indexOf(k) < 0) out.push(k); });
-  Object.keys(state.extraIng || {}).forEach(function(k){ if(out.indexOf(k) < 0) out.push(k); });
+  function put(k){ if(out.indexOf(k) < 0) out.push(k); }
+  Object.keys(ING).forEach(put);
+  Object.keys(state.ings || {}).forEach(put);
+  Object.keys(state.extraIng || {}).forEach(put);
   return out;
 }
 
@@ -1177,14 +1211,24 @@ function sheetRecipe(){
          '</span><button class="ghost" data-act="dauto">不对，改</button></div>';
   }
 
-  /* ④ 用料：只显示已选的，要加才展开 */
+  /* ④ 用料：只显示已选的，要加才展开。每样都标出冰箱里有没有——
+     菜谱用料和库存本来就是同一套食材 id，这里把它显出来 */
   h += '<div class="field"><span>用料' + (d.needs.length ? ' · ' + d.needs.length + ' 样' : ' · 还没填') + '</span>';
   h += '<div class="ingchips">';
   d.needs.forEach(function(id){
-    h += '<button class="ingchip on" data-act="ding" data-id="' + id + '">' + esc(ingName(id)) + '<b>×</b></button>';
+    var got = stockedOf(id);
+    h += '<button class="ingchip on' + (got ? '' : ' miss') + '" data-act="ding" data-id="' + id + '">' +
+         esc(ingName(id)) + (got ? '' : '<i>缺</i>') + '<b>×</b></button>';
   });
   h += '<button class="ingchip add" data-act="dpad">' + (d.needs.length ? '＋ 加' : '＋ 点一下加食材') + '</button>';
   h += '</div>';
+  if(d.needs.length){
+    var gotN = d.needs.filter(function(id){ return stockedOf(id); }).length;
+    var missN = d.needs.length - gotN;
+    h += '<div class="ingstat">冰箱里对得上 ' + gotN + ' 样' +
+         (missN ? '，缺 ' + missN + ' 样——排进今天后它会自动出现在「今天要买」' : '，齐了') +
+         '（蛋奶、坚果这类常备品算作有）</div>';
+  }
   if(d._pad){
     var q = String(ui.ingQ || '').trim();
     var cand = allIngIds().filter(function(id){
@@ -1575,14 +1619,15 @@ function doAddByName(){
 }
 
 function addIngToDraft(name){
-  var t = String(name || '').trim();
+  var t = normIngName(name);
   if(!t) return;
   var id = matchIng(t);
   if(!id){
-    /* 冰箱里可能已经有这条自定义食材（cus_xxx）。不认它就会另起一个 x_xxx，
-       于是「冰箱里明明有」照样被列进今天要买 */
-    var cus = (state.inventory || []).filter(function(x){ return x.custom && x.name === t; })[0];
-    id = cus ? cus.id : 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+    /* 菜谱里新起的食材也进同一份食材库：给它一个分类和保质期，
+       这样它马上就能在冰箱里记、也能被其他菜谱认出来 */
+    id = newIngId();
+    state.ings[id] = { n: t, g: ui.addGrp && groupsOf().indexOf(ui.addGrp) >= 0 ? ui.addGrp : otherGroup(),
+                       d: state.shelfName[t] || 3 };
     state.extraIng[id] = t;
     save();
   }
@@ -1614,8 +1659,116 @@ function rebuildItems(){
 /* 以前用来区分「代码自带」和「自己建的」。现在只有自己建的，
    留着空实现是因为老数据的 hidden / edits 里还带 p01… 这类 id */
 function isBuiltin(id){ return false; }
-/* 食材显示名：食材表 > 编辑器里新起的名字 > 原样返回 */
-function ingName(id){ return (id && (ING[id] || state.extraIng[id])) || id || ''; }
+/* ============================================================
+   食材库 + 分类
+   以前有两条互不相干的线：菜谱用料认得的是 ING 里那批 id，
+   而你在冰箱里自己加的东西只有一个名字挂在库存行上（cus_xxx）。
+   菜谱写「塔菜」时认不出库存里的塔菜，于是「冰箱明明有」照样进今天要买，
+   吃完也不会扣那一行。这里把两边并成一份：
+   自建食材先进 state.ings（名字 / 分类 / 保质期），
+   菜谱用料、库存、采购清单都按同一套 id 说话。
+   ============================================================ */
+function groupsOf(){
+  var g = (state && state.groups) ? state.groups : null;
+  return (g && g.length) ? g : DEFAULT_GROUPS;
+}
+function otherGroup(){
+  var g = groupsOf();
+  return g.indexOf('其他') >= 0 ? '其他' : g[g.length - 1];
+}
+function isUserIng(id){ return !!(id && state.ings && state.ings[id]); }
+/* 一样东西归哪一类：手改过的 > 自建时选的 > 内置推荐 > 兜底「其他」 */
+function gOf(id){
+  if(state.ingG && state.ingG[id]) return state.ingG[id];
+  if(state.ings && state.ings[id] && state.ings[id].g) return state.ings[id].g;
+  if(SHELF[id] && SHELF[id].g) return SHELF[id].g;
+  return otherGroup();
+}
+function setIngGroup(id, g){
+  if(!id || groupsOf().indexOf(g) < 0) return false;
+  state.ingG[id] = g;
+  if(state.ings[id]) state.ings[id].g = g;
+  save();
+  return true;
+}
+/* 输入的名字先归一：「新鲜 菠菜（一把）500g」→「新鲜菠菜」。
+   数字+量词才剪，免得「面条」被剪成「面」、「粉条」被剪成「粉」 */
+function normIngName(s){
+  var t = String(s == null ? '' : s);
+  t = t.replace(/[\u3000\s]+/g, '');
+  t = t.replace(/[（(][^）)]*[)）]/g, '');
+  t = t.replace(/^[·•\-—_+＊*]+/, '').replace(/[·•\-—_+＊*]+$/, '');
+  var cut = t.replace(/[\d一二三四五六七八九十半]+(?:kg|g|ml|毫升|升|克|斤|个|把|袋|盒|颗|根|只|包|瓶|罐|块|条|片|束|棵|朵|段|头|匙)$/i, '');
+  if(cut && cut !== t && cut.length >= 2) t = cut;
+  return t.trim();
+}
+/* 打的名字 → 已有食材 id：精确 > 别名 > 互相包含，跟菜谱用料识别同一套规则。
+   所以「西红柿」会落到番茄，「新鲜菠菜」会落到菠菜，不会各记一条 */
+function matchIngName(name){ return matchIng(normIngName(name)); }
+
+/* 老数据搬家：库存里的 cus_xxx、菜谱里的 extraIng，全部注册成正式食材。
+   同名历史上可能建过好几条（就是「打已有名字又新建一条」造成的），按名字并到一个 id 上 */
+function migrateIngs(){
+  state.ings = state.ings || {};
+  state.ingG = state.ingG || {};
+  var g = Array.isArray(state.groups)
+    ? state.groups.filter(function(x){ return x && x !== '自定义'; })
+    : null;
+  state.groups = (g && g.length) ? g : DEFAULT_GROUPS.slice();
+  Object.keys(state.extraIng || {}).forEach(function(id){
+    if(!state.ings[id]) state.ings[id] = { n: state.extraIng[id], g: otherGroup(), d: state.shelf[id] || 3 };
+  });
+  var byName = {};
+  Object.keys(state.ings).forEach(function(id){
+    var nm = normIngName(state.ings[id] && state.ings[id].n);
+    if(nm && !byName[nm]) byName[nm] = id;
+  });
+  (state.inventory || []).forEach(function(x){
+    if(!x || !x.qty) return;
+    if(SHELF[x.id] || ING[x.id]) return;          /* 内置食材本来就在库里 */
+    var nm = normIngName(x.name || (state.ings[x.id] && state.ings[x.id].n) || '');
+    if(!nm) return;
+    var built = matchIng(nm);
+    if(built && !state.ings[built]){ x.id = built; delete x.custom; delete x.name; return; }
+    var keep = byName[nm];
+    if(!keep){
+      keep = x.id || newIngId();
+      byName[nm] = keep;
+      if(!state.ings[keep]) state.ings[keep] = { n: x.name || nm, g: otherGroup(), d: state.shelfName[x.name] || 3 };
+    }
+    x.id = keep;
+    if(!x.name && state.ings[keep]) x.name = state.ings[keep].n;
+    x.custom = 1;
+  });
+  dedupeInventory();
+}
+/* 同一个 id 的多条「还没过期」的行并成一条（数量相加、到期取晚的）。
+   这本来就是 invAdd 的口径；老数据里同一样东西建了两三条的，在这里收拢。
+   过期行保留：它是另一批货，不该被新货续命 */
+function dedupeInventory(){
+  var keep = {}, out = [];
+  (state.inventory || []).forEach(function(x){
+    if(!x || !(x.qty > 0)) return;
+    if(daysBetween(todayStr(), x.exp) < 0){ out.push(x); return; }
+    if(!keep[x.id]){ keep[x.id] = x; out.push(x); return; }
+    var t = keep[x.id];
+    t.qty += x.qty;
+    if(x.exp > t.exp) t.exp = x.exp;
+    if(x.name && !t.name) t.name = x.name;
+  });
+  state.inventory = out;
+}
+function newIngId(){ return 'ing' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+/* 现存的食材总数：逛冰箱、分类计数都按这个口径 */
+function groupIds(g){
+  return allIngIds().filter(function(id){ return !isPantry(id) && gOf(id) === g; });
+}
+
+/* 食材显示名：内置表 > 自建食材库 > 老版本 extraIng > 原样返回 */
+function ingName(id){
+  if(!id) return '';
+  return ING[id] || (state.ings && state.ings[id] && state.ings[id].n) || state.extraIng[id] || id;
+}
 
 /* 存一条：id 为空即新建；同 id 就是整条替换 */
 function saveRecipe(d){
@@ -1704,8 +1857,10 @@ function labelOf(x){ return (x && (x.name || ingName(x.id))) || ''; }
    三级优先：同名自定义食材记过的天数 > 该食材改过的天数 > SHELF 推荐值 > 兜底 3 天。
    自定义食材每次新建都是新 id，所以按「名字」记一份，下次买同样的东西还是你上次定的天数。 */
 function shelfDays(id, name){
+  /* 自建食材的默认天数存在食材库里，所以哪怕冰箱里暂时没货，下次买回来还是你上次定的天数 */
   if(name && state.shelfName[name] != null) return state.shelfName[name];
   if(id && state.shelf[id] != null) return state.shelf[id];
+  if(id && state.ings[id] && state.ings[id].d) return state.ings[id].d;
   return (SHELF[id] && SHELF[id].d) || 3;
 }
 function shelfNote(id){ return (SHELF[id] && SHELF[id].note) || ''; }
@@ -1715,7 +1870,15 @@ function setShelfDays(id, days, name){
   if(!(n >= 1)) n = 1;
   if(n > 90) n = 90;
   if(name) state.shelfName[name] = n;
-  if(id) state.shelf[id] = n;
+  if(id){
+    state.shelf[id] = n;
+    /* 自建食材的名字和 id 是两份记账，改天数要一起改，
+       否则下次按名字取会拿回老数字（按名字那份优先） */
+    if(state.ings[id]){
+      state.ings[id].d = n;
+      state.shelfName[state.ings[id].n] = n;
+    }
+  }
   save();
   return n;
 }
@@ -1739,41 +1902,84 @@ function invAdd(id, qty, exp, name){
 }
 
 /* 自定义食材：先看是不是已有的食材名（输「菠菜」不该新建一条），
-   是就直接记到那个 id 上，不是才生成 cus_xxx。
-   days 传了就是这一批的保质期，记到名字上，下次同名自动沿用。 */
-function addCustom(name, days){
-  var t = String(name || '').trim();
+   是就直接记到那个 id 上，不是才生成一条新的。
+   group 传了就是这一类的分类，days 传了就是这一批的保质期。
+   返回 id；常备品只记天数不入库存（调用方自己看 isPantry 决定怎么提示）。 */
+function addCustom(name, days, group, forceNew){
+  var t = normIngName(name);
   if(!t) return null;
-  var hitId = null;
-  Object.keys(ING).forEach(function(k){
-    if(ingName(k) === t) hitId = k;
-  });
-  if(hitId){
-    if(days) setShelfDays(hitId, days);
+  var dd = (days == null || days === '') ? null : Math.round(Number(days));
+  if(dd != null && (isNaN(dd) || dd < 1)) dd = null;
+  if(dd != null) dd = Math.min(90, dd);
+  var g = group || '';
+  if(groupsOf().indexOf(g) < 0) g = otherGroup();
+  var hit;
+  if(forceNew){
+    /* 「不是它，单独建一条」：只认一字不差的重名，不再按包含/别名去靠 */
+    hit = allIngIds().filter(function(id){ return normIngName(ingName(id)) === t; })[0] || null;
+  } else hit = matchIng(t);
+  if(hit){
+    /* 打的是已有的东西：只加数量，绝不新建重名条目。
+       注意「不动它的分类」——你是在补货，不是在重新归类；
+       真要改分类，点进那一样改。 */
+    if(dd) setShelfDays(hit, dd, isUserIng(hit) ? ingName(hit) : null);
     /* 常备品（牛奶、鸡蛋、坚果…）不进库存表：invList 会把它过滤掉，
-       真记进去就成了「用户看不见、也删不掉，但 eat 会扣」的幽灵库存。
-       只记它的保质期/名字就够了。 */
-    if(isPantry(hitId)) return hitId;
-    invAdd(hitId, 1);
-    return hitId;
+       真记进去就成了「用户看不见、也删不掉，但 eat 会扣」的幽灵库存 */
+    if(isPantry(hit)) return hit;
+    invAdd(hit, 1);
+    return hit;
   }
-  if(days) setShelfDays(null, days, t);
-  var id = 'cus_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  var id = newIngId();
+  state.ings[id] = { n: t, g: g, d: dd || 3 };
+  if(dd) state.shelfName[t] = dd;
   invAdd(id, 1, null, t);
   return id;
+}
+/* 输入框下面那行提示：这一笔会加到哪儿、会不会跟已有的合并 */
+function stockHintHtml(name){
+  var t = normIngName(name);
+  if(!t) return '<span class="dim">打名字。冰箱里已经有的会自动对上，不会再建一条重复的。</span>';
+  var hit = matchIng(t);
+  if(hit){
+    var nm = ingName(hit);
+    if(isPantry(hit)) return '「' + esc(nm) + '」是常备品，不记库存，只把保质期记下来。';
+    var row = invAll(hit);
+    var h = '对上冰箱里的「' + esc(nm) + '」' +
+            (row ? '（已有 ' + row.qty + ' 份，还剩 ' + invDays(row) + ' 天）' : '') +
+            ' · 点加入就是 ＋1。';
+    /* 靠「包含」猜出来的匹配偶尔会猜错（牛肉丸 ≠ 牛里脊），留个一键分开的路 */
+    if(normIngName(nm) !== t){
+      h += ' <button class="linkbtn" data-act="cusNew">不是它，单独建一条</button>';
+    }
+    return h;
+  }
+  var g = ui.addGrp && groupsOf().indexOf(ui.addGrp) >= 0 ? ui.addGrp : otherGroup();
+  return '新食材「' + esc(t) + '」· 会加进「' + esc(g) + '」，保质 ' + (ui.cusDays || 3) + ' 天。';
 }
 
 function customList(){
   var seen = {}, out = [];
-  state.inventory.forEach(function(x){
-    if(!x.custom || !x.name || seen[x.name]) return;
-    seen[x.name] = 1;
-    out.push(x.name);
-  });
+  function add(nm){
+    nm = nm ? String(nm) : '';
+    if(!nm || seen[nm]) return;
+    seen[nm] = 1; out.push(nm);
+  }
+  Object.keys(state.ings || {}).forEach(function(id){ add(state.ings[id] && state.ings[id].n); });
+  (state.inventory || []).forEach(function(x){ if(x.custom && x.name) add(x.name); });
+  return out;
+}
+/* 所有自建食材的 id（不管冰箱里现在有没有货） */
+function customIds(){
+  var out = Object.keys(state.ings || {});
+  (state.inventory || []).forEach(function(x){ if(x.custom && out.indexOf(x.id) < 0) out.push(x.id); });
   return out;
 }
 function invOfName(name){
-  return state.inventory.filter(function(x){ return x.custom && x.name === name && x.qty > 0; })[0];
+  var t = normIngName(name);
+  if(!t) return null;
+  var ids = customIds().filter(function(id){ return normIngName(ingName(id)) === t; });
+  for(var i = 0; i < ids.length; i++){ var r = invAll(ids[i]); if(r) return r; }
+  return (state.inventory || []).filter(function(x){ return x.custom && normIngName(x.name) === t && x.qty > 0; })[0] || null;
 }
 
 /* 哪些菜能用到它——这是「买了用不完」的解药 */
@@ -2123,7 +2329,8 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            draft:null, impMsg:null, pasteTxt:'', ingQ:'',
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
-           cusName:'', cusDays:null, addMode:false };
+           cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false,
+           gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null };
 (function(){
   var t = (location.hash || '').replace('#','');
   if(['today','fridge','lib','log'].indexOf(t) >= 0) ui.tab = t;
@@ -2567,8 +2774,13 @@ function viewLib(){
   list.forEach(function(it){
     var inCombo = (state.today.pick ? slotsOf(state.today.pick.combo) : [])
                   .some(function(x){ return x && x.id === it.id; });
+    /* 料齐没齐，列表里就告诉你——不用点进去、更不用跑去冰箱页对着看 */
+    var missN = (it.needs || []).filter(function(id){ return !stockedOf(id); }).length;
     var tags = '<span class="tag">' + it.wall + '′</span>' +
                '<span class="tag' + (it.fire === 'watch' ? ' warn' : '') + '">' + FIRE[it.fire] + '</span>' +
+               ((it.needs || []).length
+                 ? (missN ? '<span class="tag warn">缺 ' + missN + ' 样</span>' : '<span class="tag ok">料齐</span>')
+                 : '') +
                (it.ext ? '<span class="tag">补录</span>' : '') +
                (it.wk ? '<span class="tag ok">周末</span>' : '') +
                (it.cap != null ? '<span class="tag warn">限量 ' + (it.cap < 1 ? '两周 1 次' : '每周 ' + it.cap + ' 次') + '</span>' : '') +
@@ -2600,8 +2812,11 @@ function viewLib(){
 function invRow(x, soon){
   var d = invDays(x), sh = SHELF[x.id] || {};
   var ddTxt = d === 0 ? '今天到期' : '还剩 ' + d + ' 天';
-  var sub = [x.custom ? '自己加的' : sh.g, sh.fresh ? '建议当天吃' : '', '× ' + x.qty].filter(Boolean).join(' · ');
-  var canUse = !x.custom && !!(ING[x.id] || state.extraIng[x.id]);
+  /* 「几道菜用得到」是菜谱和库存之间那条线：没有它，你没法知道买了会不会用不完 */
+  var uses = recipesUsing(x.id).length;
+  var sub = [gOf(x.id), sh.fresh ? '建议当天吃' : '', '× ' + x.qty,
+             uses ? uses + ' 道菜用得到' : ''].filter(Boolean).join(' · ');
+  var canUse = uses > 0;
   return '<div class="invrow" data-act="invOpen" data-id="' + x.id + '">' +
          '<div class="ib"><div class="nm">' + esc(labelOf(x)) + '</div><div class="mt">' + sub + '</div></div>' +
          '<div class="rt"><div class="dd' + (soon ? ' warn' : '') + '">' + ddTxt + '</div>' +
@@ -2647,10 +2862,13 @@ function viewFridge(){
   }
 
   h += '<div class="actions"><button class="btn btn-ghost" data-act="sheetAdd">＋ 记一笔买回来的</button></div>';
-  h += '<div class="actions" style="margin-top:8px"><button class="btn btn-ghost" data-act="sheetShelf" style="font-size:13px;color:#6B665B">保质期设置 · ' + Object.keys(SHELF).length + ' 项 + 自定义</button></div>';
+  h += '<div class="actions" style="margin-top:8px">' +
+       '<button class="btn btn-ghost" data-act="sheetCat" style="font-size:13px;color:#6B665B">分类 · ' + groupsOf().length + ' 类</button>' +
+       '<button class="btn btn-ghost" data-act="sheetShelf" style="font-size:13px;color:#6B665B">保质期设置</button>' +
+       '</div>';
   h += '<div class="foot" style="margin-top:14px">只记生鲜：叶菜、果菜、菌菇、根茎、肉、豆腐、水果。<br>' +
        '蛋奶、酸奶、坚果、杂粮、冷冻成品这些常备品不记，自己看着快没了就买。<br>' +
-       '做菜点「就吃这个」会自动扣库存，不用手动减。</div>';
+       '做菜点「就吃这个」会自动扣库存，菜谱写到的食材会算进采购清单。</div>';
 
   /* 常备品不是不存在，只是不跟踪——列出来是为了让你知道「哪些不在这里」 */
   h += '<div class="card" style="margin-top:14px"><div class="card-h"><b>不记库存的常备品</b><span>' + PANTRY.length + ' 项</span></div>' +
@@ -2740,6 +2958,7 @@ function renderSheet(){
   if(ui.sheetType === 'add') h = sheetAdd();
   else if(ui.sheetType === 'edit') h = sheetEdit();
   else if(ui.sheetType === 'shelf') h = sheetShelf();
+  else if(ui.sheetType === 'cat') h = sheetCat();
   else if(ui.sheetType === 'recipe') h = sheetRecipe();
   else if(ui.sheetType === 'import') h = sheetImport();
   else if(ui.sheetType === 'pending') h = sheetPending();
@@ -3100,40 +3319,73 @@ function applyBackup(){
   location.reload();
 }
 
+/* 保质期输入框的默认值：打的名字如果见过，就沿用你上次定的天数 */
+function addDaysDefault(){
+  var t = normIngName(ui.cusName);
+  if(ui.cusDaysTouched && ui.cusDays != null && ui.cusDays !== '') return ui.cusDays;
+  if(!t) return 3;
+  var hit = matchIng(t);
+  return hit ? shelfDays(hit) : (state.shelfName[t] || 3);
+}
+
+/* 记一笔的提交动作：按钮和回车都走这里，保证两条路行为一致 */
+function doCusAdd(){
+  var box = document.getElementById('cusName');
+  var dayBox = document.getElementById('cusDays');
+  var nmRaw = box ? box.value : ui.cusName;
+  var dd = (dayBox && dayBox.value !== '') ? Number(dayBox.value) : null;
+  var probe = normIngName(nmRaw);
+  /* 调料不进冰箱：记了也不会有「还剩几天」的意思，只会把列表弄脏 */
+  if(!ui.forceNew && probe && !matchIng(probe) && isSeasoning(probe)){ toast('「' + probe + '」算调料，不用记库存'); return; }
+  if(probe.length > 12){ toast('名字短一点，最多 12 个字'); return; }
+  var newId = addCustom(nmRaw, dd, ui.addGrp, ui.forceNew);
+  ui.forceNew = false;
+  if(!newId){ toast('先打个名字'); return; }
+  save();
+  if(isPantry(newId)) toast(ingName(newId) + ' 是常备品，不记库存；保质期按 ' + shelfDays(newId) + ' 天记下了');
+  else toast(ingName(newId) + ' 记进冰箱了 · ' + gOf(newId) + ' · 保质 ' + shelfDays(newId) + ' 天');
+  /* 加完把分类切到它实际所在的那一类，好看得见刚加的东西。
+     常备品不进库存，就跟分类无关，别把人从正在逛的那一类拽走 */
+  if(!isPantry(newId)) ui.addGrp = gOf(newId);
+  ui.cusName = ''; ui.cusDays = null; ui.cusDaysTouched = false;
+  renderSheet(); renderKeep();
+  var nb = document.getElementById('cusName');
+  if(nb && nb.focus) nb.focus();   /* 连着记好几样时不用每次点输入框 */
+}
+
 function sheetAdd(){
+  var g = (ui.addGrp && groupsOf().indexOf(ui.addGrp) >= 0) ? ui.addGrp : groupsOf()[0];
+  ui.addGrp = g;
   var h = '<h3>记一笔买回来的</h3>';
 
   /* 自定义输入：盒马买的东西千奇百怪，不能只给固定选项。天数也能自己填 */
   h += '<div class="cuswrap">' +
-       '<input id="cusName" type="text" placeholder="没在列表里？打名字，比如「塔菜」" autocomplete="off" enterkeyhint="done" value="' + esc(ui.cusName || '') + '">' +
-       '<div class="cusdays"><input id="cusDays" type="number" min="1" max="90" inputmode="numeric" value="' + (ui.cusDays == null ? ui.addDays : esc(ui.cusDays)) + '"><span>天</span></div>' +
+       '<input id="cusName" type="text" placeholder="打名字，比如「塔菜」" autocomplete="off" enterkeyhint="done" value="' + esc(ui.cusName || '') + '">' +
+       '<div class="cusdays"><input id="cusDays" type="number" min="1" max="90" inputmode="numeric" value="' + esc(addDaysDefault()) + '"><span>天</span></div>' +
        '<button data-act="cusAdd">加入</button></div>';
-  h += '<div style="font-size:11.5px;color:#A9A398;margin-top:7px;line-height:1.6">' +
-       '中间是天数，1–90 随便填；同名食材下次自动沿用你填过的天数。</div>';
+  /* 这一行随打字变：吃掉一半的惊喜都在这里——打「西红柿」会直接告诉你会并到番茄上 */
+  h += '<div id="cusHint" class="cushint">' + stockHintHtml(ui.cusName) + '</div>';
 
-  h += '<div class="chips wrap" style="padding-bottom:4px">';
-  GROUPS.forEach(function(g){
-    h += '<button class="chip' + (ui.addGrp === g ? ' on' : '') + '" data-act="addgrp" data-g="' + g + '">' + g + '</button>';
+  h += '<div class="cuscat"><span>新东西加到</span></div>';
+  h += '<div class="chips wrap" style="padding-bottom:8px">';
+  groupsOf().forEach(function(x){
+    h += '<button class="chip' + (ui.addGrp === x ? ' on' : '') + '" data-act="addgrp" data-g="' + esc(x) + '">' + esc(x) + '</button>';
   });
+  h += '<button class="chip mgr" data-act="sheetCat">管理分类</button>';
   h += '</div>';
 
-  if(ui.addGrp === '自定义'){
-    var cs = customList();
-    if(!cs.length){
-      h += '<div class="empty" style="padding:18px 0">还没自己加过东西。上面输入框打名字就能加。</div>';
-    } else {
-      h += '<div class="cusrow">';
-      cs.forEach(function(nm){
-        var row = invOfName(nm);
-        h += '<button class="custag" data-act="cusAgain" data-name="' + esc(nm) + '">' +
-             '<b>' + esc(nm) + '</b><span>已有 ' + (row ? row.qty : 0) + ' · 再加 1</span></button>';
-      });
-      h += '</div>';
-    }
+  var ids = groupIds(g);
+  /* 冰箱里已经有的排前面：补货时一眼就能点到 */
+  ids.sort(function(a, b){
+    var ha = invAll(a) ? 0 : 1, hb = invAll(b) ? 0 : 1;
+    return ha - hb;
+  });
+  if(!ids.length){
+    h += '<div class="empty" style="padding:14px 0">「' + esc(g) + '」里还没有食材。上面打名字就能加。</div>';
   } else {
     h += '<div class="pickgrid">';
-    Object.keys(SHELF).filter(function(id){ return SHELF[id].g === ui.addGrp; }).forEach(function(id){
-      var have = invAll(id), sh = SHELF[id];
+    ids.forEach(function(id){
+      var have = invAll(id), sh = SHELF[id] || {};
       h += '<button class="pickbtn' + (have ? ' has' : '') + '" data-act="invAdd" data-id="' + id + '">' +
            '<b>' + esc(ingName(id)) + '</b>' +
            '<span>' + (have ? '已有 ' + have.qty + ' 份 · 再加 1' : '保质 ' + shelfDays(id) + ' 天' + (sh.fresh ? ' · 建议当天' : '')) + '</span>' +
@@ -3144,7 +3396,7 @@ function sheetAdd(){
 
   h += '<div style="margin-top:14px;font-size:12px;color:#A9A398;line-height:1.7">' +
        '点一下加 1 份，到期日按那样东西自己的保质期算好，不用选。<br>' +
-       '要改天数：回冰箱页「保质期设置」。要改数量或日期：点那一样。<br>' +
+       '名字已经有的会直接并上去，不会建两条；真要新建，上面选好分类再加。<br>' +
        '这里只收生鲜：蛋奶、坚果、杂粮、冷冻成品不记。</div>';
   h += '<div style="margin-top:14px"><button class="btn btn-ghost" data-act="closesheet" style="width:100%">完成</button></div>';
   return h;
@@ -3156,7 +3408,18 @@ function sheetEdit(){
   var id = x.id, sh = SHELF[id] || {}, d = invDays(x);
   var h = '<h3>' + esc(labelOf(x)) + '</h3>';
   h += '<div style="font-size:12.5px;color:#8A8478;margin:-8px 0 4px">' +
-       [x.custom ? '自己加的' : sh.g, '保质 ' + shelfDays(id, x.name) + ' 天', sh.fresh ? '建议当天吃' : ''].filter(Boolean).join(' · ') + '</div>';
+       [isUserIng(id) ? '自己加的' : gOf(id), '保质 ' + shelfDays(id, x.name) + ' 天',
+        sh.fresh ? '建议当天吃' : ''].filter(Boolean).join(' · ') + '</div>';
+  h += '<div class="setrow"><span>分类</span><span style="font-size:13px;color:#5E5A50">' + esc(gOf(id)) +
+       ' <button class="ghost" data-act="gEdit">改</button></span></div>';
+  if(ui.gEdit){
+    h += '<div class="chips wrap" style="padding:2px 0 6px">';
+    groupsOf().forEach(function(g2){
+      h += '<button class="chip' + (gOf(id) === g2 ? ' on' : '') + '" data-act="gSet" data-id="' + id +
+           '" data-g="' + esc(g2) + '">' + esc(g2) + '</button>';
+    });
+    h += '</div>';
+  }
   h += '<div class="qstepper">' +
        '<button data-act="invMinus" data-id="' + id + '">−</button><b>' + x.qty + '</b>' +
        '<button data-act="invPlus" data-id="' + id + '">+</button>' +
@@ -3173,8 +3436,9 @@ function sheetEdit(){
     h += '<div style="margin-top:14px;font-size:12px;color:#8A8478;line-height:1.7">能用它的菜：' +
          use.slice(0,5).map(function(r){ return esc(r.n); }).join('、') +
          (use.length > 5 ? ' 等 ' + use.length + ' 道' : '') + '</div>';
-  } else if(x.custom){
-    h += '<div style="margin-top:14px;font-size:12px;color:#A9A398;line-height:1.7">自己加的食材，只用于记库存，不参与推荐。</div>';
+  } else if(isUserIng(id)){
+    h += '<div style="margin-top:14px;font-size:12px;color:#A9A398;line-height:1.7">自己加的食材：菜谱写到这个名会用上它，' +
+         '今天要买里也不会再列它。想让菜谱认得更准，名字跟菜谱里写的一致就行（西红柿/番茄这类会自动对上）。</div>';
   }
   h += '<div class="actions" style="margin-top:16px">' +
        '<button class="btn btn-ghost" data-act="invDrop" data-id="' + id + '" style="color:#A0503A">吃完 / 扔掉</button>' +
@@ -3199,25 +3463,87 @@ function sheetShelf(){
   var h = '<h3>保质期设置</h3>';
   h += '<div style="font-size:12px;color:#8A8478;line-height:1.7;margin:-8px 0 10px">' +
        '按家用冰箱冷藏 4°C 估的「还吃得下」的天数，不是厂商标的极限。改完只影响以后记的账，已经记进冰箱的到期日不动。</div>';
-  GROUPS.forEach(function(g){
-    var ids = Object.keys(SHELF).filter(function(id){ return SHELF[id].g === g; });
+  h += '<div class="actions" style="margin:0 0 6px"><button class="btn btn-ghost" data-act="sheetCat" style="font-size:13px">管理分类（' + groupsOf().length + ' 类）</button></div>';
+  groupsOf().forEach(function(g){
+    var ids = groupIds(g);
     if(!ids.length) return;
-    h += '<div class="shgrp">' + g + '</div>';
-    ids.forEach(function(id){ h += shRow(id, shelfDays(id), shelfNote(id)); });
-  });
-  var cs = customList();
-  if(cs.length){
-    h += '<div class="shgrp">自己加的</div>';
-    cs.forEach(function(nm){
-      var row = invOfName(nm);
-      h += shRow(row ? row.id : ('cus_' + nm), shelfDays(row ? row.id : null, nm), '按名字记住，下次同名沿用', nm);
+    h += '<div class="shgrp">' + esc(g) + '</div>';
+    ids.forEach(function(id){
+      h += shRow(id, shelfDays(id), isUserIng(id) ? '自己加的 · 按名字记住，下次同名沿用' : shelfNote(id));
     });
-  }
+  });
   h += '<div class="actions" style="margin-top:16px">' +
        '<button class="btn btn-ghost" data-act="shReset" style="font-size:13px">恢复推荐值</button>' +
        '<button class="btn btn-primary" data-act="closesheet">好了</button></div>';
   h += '<div class="foot" style="margin-top:10px">叶菜压得短是有意的：宁可在第 3 天吃掉，也别第 4 天扔。</div>';
   return h;
+}
+
+/* ============================================================
+   分类管理：加、改名、删。分类只是给你自己逛冰箱用的，
+   删掉一类不会删食材——里面的东西全部挪到「其他」。
+   ============================================================ */
+function sheetCat(){
+  var g = groupsOf();
+  var h = '<h3>分类</h3>';
+  h += '<div style="font-size:12px;color:#8A8478;line-height:1.7;margin:-8px 0 10px">' +
+       '分类只决定你逛冰箱时怎么分组，不影响推荐。删掉一类，里面的食材会挪到「其他」，不会丢。</div>';
+  g.forEach(function(name){
+    var n = groupIds(name).length;
+    if(ui.catEdit === name){
+      h += '<div class="catrow"><input id="catName" type="text" value="' + esc(ui.catName == null ? name : ui.catName) + '">' +
+           '<button data-act="catSave" data-g="' + esc(name) + '">存</button>' +
+           '<button class="ghost" data-act="catCancel">取消</button></div>';
+      return;
+    }
+    h += '<div class="catrow"><div class="ib"><div class="nm">' + esc(name) + '</div>' +
+         '<div class="mt">' + n + ' 样食材</div></div>' +
+         '<button class="ghost" data-act="catRename" data-g="' + esc(name) + '">改名</button>' +
+         (g.length > 1 ? '<button class="ghost del" data-act="catDel" data-g="' + esc(name) + '">删</button>' : '') +
+         '</div>';
+  });
+  h += '<div class="catrow"><input id="catNew" type="text" placeholder="新分类名，比如「冷冻」" value="' + esc(ui.catNew || '') + '">' +
+       '<button data-act="catAdd">增加</button></div>';
+  /* 从「记一笔」或「保质期设置」进来的，看完分类要能原地回去，别让人重新点一遍 */
+  var back = ui.catFrom === 'add' ? 'add' : (ui.catFrom === 'shelf' ? 'shelf' : '');
+  h += '<div class="actions" style="margin-top:16px">' +
+       (back ? '<button class="btn btn-ghost" data-act="catBack" style="font-size:14px">回到' +
+               (back === 'add' ? '记一笔' : '保质期设置') + '</button>' : '') +
+       '<button class="btn btn-primary" data-act="' + (back ? 'catBack' : 'closesheet') + '" style="font-size:14px">好了</button></div>';
+  return h;
+}
+
+/* 改名 / 删除时，把那一类里的食材全部改指到新名字。
+   内置食材的分类原本写在 SHELF 里改不动，所以统一用 ingG 记住你的选择 */
+function relocateGroup(from, to){
+  if(!to || from === to) return;
+  allIngIds().forEach(function(id){
+    if(gOf(id) !== from) return;
+    state.ingG[id] = to;
+    if(state.ings[id]) state.ings[id].g = to;
+  });
+}
+function renameGroup(from, to){
+  var g = groupsOf();
+  if(!from || !to) return false;
+  if(from === to) return true;
+  if(g.indexOf(from) < 0 || g.indexOf(to) >= 0) return false;
+  state.groups[g.indexOf(from)] = to;
+  relocateGroup(from, to);
+  if(ui.addGrp === from) ui.addGrp = to;
+  save();
+  return true;
+}
+function deleteGroup(name){
+  var g = groupsOf();
+  if(g.length <= 1 || g.indexOf(name) < 0) return false;
+  var target = (name === '其他') ? g.filter(function(x){ return x !== name; })[0] : '其他';
+  if(g.indexOf(target) < 0) target = g.filter(function(x){ return x !== name; })[0];
+  g.splice(g.indexOf(name), 1);
+  relocateGroup(name, target);
+  if(ui.addGrp === name) ui.addGrp = target;
+  save();
+  return true;
 }
 
 var toastTimer = null;
@@ -3403,10 +3729,57 @@ document.addEventListener('click', function(e){
     invAdd(id, 1); save(); render();
     toast((ingName(id)) + ' 记进冰箱了');
   }
-  else if(act === 'sheetAdd'){ ui.sheet = true; ui.sheetType = 'add'; renderSheet(); }
+  else if(act === 'sheetAdd'){
+    ui.sheet = true; ui.sheetType = 'add';
+    ui.cusName = ''; ui.cusDays = null; ui.cusDaysTouched = false; ui.forceNew = false;   /* 每次打开都是干净的一笔 */
+    if(groupsOf().indexOf(ui.addGrp) < 0) ui.addGrp = groupsOf()[0];
+    renderSheet();
+  }
   else if(act === 'sheetShelf'){ ui.sheet = true; ui.sheetType = 'shelf'; renderSheet(); }
+  else if(act === 'sheetCat'){
+    /* 只有从「记一笔 / 保质期设置」里点进来才记「回哪儿」，冰箱页直接点的不留后路 */
+    ui.catFrom = (ui.sheet && (ui.sheetType === 'add' || ui.sheetType === 'shelf')) ? ui.sheetType : null;
+    ui.sheet = true; ui.sheetType = 'cat'; ui.catEdit = null; ui.catNew = ''; renderSheet();
+  }
+  else if(act === 'catBack'){
+    ui.sheetType = (ui.catFrom === 'add' || ui.catFrom === 'shelf') ? ui.catFrom : 'settings';
+    ui.catFrom = null; ui.sheet = true;
+    renderSheet();
+  }
   else if(act === 'addgrp'){ ui.addGrp = el.dataset.g; renderSheet(); }
   else if(act === 'adddays'){ ui.addDays = Number(el.dataset.n); renderSheet(); }
+  /* 分类：加 / 改名 / 删 */
+  else if(act === 'catAdd'){
+    var newG = normIngName((document.getElementById('catNew') || {}).value || '');
+    if(!newG){ toast('先打个分类名'); }
+    else if(groupsOf().indexOf(newG) >= 0){ toast('已经有「' + newG + '」了'); }
+    else if(newG.length > 8){ toast('分类名短一点，最多 8 个字'); }
+    else { state.groups.push(newG); save(); ui.catNew = ''; ui.addGrp = newG; toast('加了「' + newG + '」'); }
+    renderSheet(); render();
+  }
+  else if(act === 'catRename'){ ui.catEdit = el.dataset.g; ui.catName = el.dataset.g; renderSheet(); }
+  else if(act === 'catCancel'){ ui.catEdit = null; ui.catName = ''; renderSheet(); }
+  else if(act === 'catSave'){
+    var from = el.dataset.g;
+    var to = normIngName((document.getElementById('catName') || {}).value || '');
+    if(!to){ toast('名字不能空着'); }
+    else if(renameGroup(from, to)){ ui.catEdit = null; ui.catName = ''; toast('「' + from + '」改成「' + to + '」了'); }
+    else toast('已经有「' + to + '」了');
+    renderSheet(); render();
+  }
+  else if(act === 'catDel'){
+    var delG = el.dataset.g;
+    var n = groupIds(delG).length;
+    if(deleteGroup(delG)) toast('「' + delG + '」删了' + (n ? '，' + n + ' 样食材挪到「' + otherGroup() + '」' : ''));
+    else toast('至少留一个分类');
+    renderSheet(); render();
+  }
+  else if(act === 'gEdit'){ ui.gEdit = !ui.gEdit; renderSheet(); }
+  else if(act === 'gSet'){
+    setIngGroup(id, el.dataset.g); ui.gEdit = false;
+    render(); renderSheet();
+    toast('归到「' + el.dataset.g + '」了');
+  }
   else if(act === 'shPlus' || act === 'shMinus'){
     var isCus = el.dataset.cus === '1';
     var shName = el.dataset.name, shId = isCus ? null : el.dataset.id;
@@ -3419,20 +3792,13 @@ document.addEventListener('click', function(e){
     state.shelf = {}; state.shelfName = {};
     save(); renderSheet(); render(); toast('保质期已恢复推荐值');
   }
-  else if(act === 'cusAdd'){
-    var box = document.getElementById('cusName');
-    var dayBox = document.getElementById('cusDays');
-    var nm = box ? box.value : '';
-    var dd = dayBox ? Number(dayBox.value) : ui.addDays;
-    var newId = addCustom(nm, dd);
-    if(!newId){ toast('先打个名字'); }
-    else {
-      save();
-      toast(String(nm).trim() + ' 记进冰箱了，保质 ' + shelfDays(newId, String(nm).trim()) + ' 天');
-      ui.addGrp = '自定义';
-      ui.cusName = ''; ui.cusDays = null;      /* 加完清空，别把上一笔的名字留给下一笔 */
-      renderSheet(); render();
-    }
+  else if(act === 'cusAdd'){ ui.forceNew = false; doCusAdd(); }
+  /* 「不是它，单独建一条」：拿输入框里现在的内容强制新建，不再按包含匹配 */
+  else if(act === 'cusNew'){
+    var cb = document.getElementById('cusName');
+    if(cb && cb.value) ui.cusName = cb.value;
+    ui.forceNew = true;
+    doCusAdd();
   }
   else if(act === 'cusAgain'){
     var nm2 = el.dataset.name;
@@ -3447,7 +3813,7 @@ document.addEventListener('click', function(e){
        关掉之后露出来的是加减之前的库存——加的三样像没生效 */
     renderKeep();
   }
-  else if(act === 'invOpen'){ ui.sheet = true; ui.sheetType = 'edit'; ui.editId = id; renderSheet(); }
+  else if(act === 'invOpen'){ ui.sheet = true; ui.sheetType = 'edit'; ui.editId = id; ui.gEdit = false; renderSheet(); }
   else if(act === 'invPlus' || act === 'invMinus'){
     var x = invAll(id);
     if(x){ x.qty += (act === 'invPlus' ? 1 : -1); if(x.qty <= 0) state.inventory = state.inventory.filter(function(y){ return y !== x; }); }
@@ -3490,8 +3856,20 @@ document.addEventListener('input', function(e){
   else if(t.id === 'f_ingq') ui.ingQ = t.value;
   else if(t.id === 'rsTxt') ui.rsTxt = t.value;
   /* 这两格输入完常要去点分组，面板会整体重绘；不存起来就等于白打 */
-  else if(t.id === 'cusName') ui.cusName = t.value;
-  else if(t.id === 'cusDays') ui.cusDays = t.value;
+  else if(t.id === 'cusName'){
+    ui.cusName = t.value;
+    /* 提示行就地更新，不重绘整个面板——重绘会把光标顶掉，打字变成折磨 */
+    var hint = document.getElementById('cusHint');
+    if(hint) hint.innerHTML = stockHintHtml(t.value);
+    /* 天数跟着名字走：打「菠菜」给 3 天，打「番茄」给 6 天；你手改过的就不动 */
+    if(!ui.cusDaysTouched){
+      var db = document.getElementById('cusDays');
+      if(db) db.value = addDaysDefault();
+    }
+  }
+  else if(t.id === 'cusDays'){ ui.cusDays = t.value; ui.cusDaysTouched = true; }
+  else if(t.id === 'catNew') ui.catNew = t.value;
+  else if(t.id === 'catName') ui.catName = t.value;
 });
 /* 选备份文件：读进来直接走跟粘贴一样的检查 */
 document.addEventListener('change', function(e){
@@ -3545,19 +3923,33 @@ document.addEventListener('keydown', function(e){
     renderSheet();
     return;
   }
+  if(t.id === 'catNew'){
+    e.preventDefault();
+    ui.catNew = t.value;
+    if(!String(t.value || '').trim()) return;
+    var g0 = normIngName(t.value);
+    if(groupsOf().indexOf(g0) >= 0){ toast('已经有「' + g0 + '」了'); return; }
+    if(g0.length > 8){ toast('分类名短一点，最多 8 个字'); return; }
+    state.groups.push(g0); save(); ui.catNew = ''; ui.addGrp = g0;
+    renderSheet(); render();
+    return;
+  }
+  if(t.id === 'catName'){
+    e.preventDefault();
+    ui.catName = t.value;
+    var to0 = normIngName(t.value);
+    if(!to0){ toast('名字不能空着'); return; }
+    if(renameGroup(ui.catEdit, to0)){
+      toast('「' + ui.catEdit + '」改成「' + to0 + '」了');
+      ui.catEdit = null; ui.catName = '';
+      renderSheet(); render();
+    } else toast('已经有「' + to0 + '」了');
+    return;
+  }
   if(t.id !== 'cusName' && t.id !== 'cusDays') return;
   e.preventDefault();
-  var nm = (document.getElementById('cusName') || {}).value || '';
-  var dayBox = document.getElementById('cusDays');
-  var dd = dayBox ? Number(dayBox.value) : ui.addDays;
-  var newId = addCustom(nm, dd);
-  if(newId){
-    save();
-    toast(String(nm).trim() + ' 记进冰箱了，保质 ' + shelfDays(newId, String(nm).trim()) + ' 天');
-    ui.addGrp = '自定义';
-    ui.cusName = ''; ui.cusDays = null;
-  } else toast('先打个名字');
-  renderSheet(); render();
+  ui.forceNew = false;
+  doCusAdd();
 });
 
 /* ============================================================
@@ -3793,16 +4185,151 @@ if(location.search.indexOf('test') >= 0){
   chk('自定义食材天数按名字记住', shelfDays(null, '塔菜') === 6);
   state.inventory = [];
   var cusD2 = addCustom('塔菜');
-  chk('下次买同名沿用上次的天数', cusD2 !== cusD && invDays(invAll(cusD2)) === 6);
+  chk('下次买同名沿用上次的天数', cusD2 === cusD && invDays(invAll(cusD2)) === 6, invDays(invAll(cusD2)) + ' 天');
+  chk('同名不会建第二条', customIds().length === 1, customIds().join(','));
   chk('打已有的食材名能带天数改到那一样上', (function(){
     var r = addCustom('番茄', 9); return r === 'tomato' && shelfDays('tomato') === 9;
   })());
 
+  /* ---------- 打名字自动对上已有的东西 ---------- */
+  state.inventory = []; state.ings = {}; state.ingG = {};
+  state.shelf = {}; state.shelfName = {}; state.groups = DEFAULT_GROUPS.slice();
+  var n1 = addCustom('西红柿', null, '果菜');
+  chk('打别名「西红柿」对上番茄', n1 === 'tomato' && invAll('tomato').qty === 1, n1);
+  var n2 = addCustom('新鲜 菠菜（一把）');
+  chk('带前缀、括号、空格的名字也能对上', n2 === 'spinach' && invAll('spinach').qty === 1, n2);
+  var n3 = addCustom('塔菜', 5, '叶菜');
+  var n4 = addCustom('塔 菜', null, '叶菜');
+  chk('同一个名字打两次只有一条', n3 === n4 && invAll(n3).qty === 2 && customIds().length === 1, customIds().join(','));
+  chk('新建的东西带分类', gOf(n3) === '叶菜', gOf(n3));
+  chk('自己填的天数按名字记住', shelfDays(n3) === 5, String(shelfDays(n3)));
+  chk('常备品不占库存，只记天数', (function(){
+    var e = addCustom('鸡蛋', 8); return e === 'egg' && !invAll('egg') && shelfDays('egg') === 8;
+  })());
+  chk('提示行会说对上了哪个、会不会 ＋1', (function(){
+    var s = stockHintHtml('番茄');
+    return s.indexOf('番茄') >= 0 && s.indexOf('＋1') >= 0 && stockHintHtml('').indexOf('自动对上') >= 0;
+  })());
+  chk('靠包含猜出来的匹配能一键拆开', (function(){
+    var s = stockHintHtml('牛肉丸');
+    var keep = state.inventory.slice();
+    var id = addCustom('牛肉丸', 3, '肉类', true);
+    var ok = s.indexOf('不是它') >= 0 && id !== 'beef' && !invAll('beef') &&
+             invAll(id) && normIngName(ingName(id)) === '牛肉丸';
+    state.inventory = keep; state.ings = {}; state.ingG = {};
+    return ok;
+  })());
+
+  /* ---------- 分类：加 / 改名 / 删 ---------- */
+  state.groups = DEFAULT_GROUPS.slice(); state.ingG = {};
+  state.inventory = []; state.ings = {}; state.shelf = {}; state.shelfName = {};
+  var kid = addCustom('速冻毛豆', 90, '冷冻');   /* 还没有这一类的名字 → 兜到「其他」 */
+  chk('选不存在的分类会兜到「其他」', gOf(kid) === '其他', gOf(kid));
+  state.groups.push('冷冻');
+  chk('能改到自建分类', setIngGroup(kid, '冷冻') && gOf(kid) === '冷冻' && groupIds('冷冻').length === 1);
+  chk('内置食材也能改分类', (function(){
+    setIngGroup('beef', '冷冻');
+    return gOf('beef') === '冷冻' && groupIds('冷冻').length === 2;
+  })());
+  chk('分类改名，里面的食材跟着走', (function(){
+    var ok = renameGroup('冷冻', '冻品');
+    return ok && gOf(kid) === '冻品' && gOf('beef') === '冻品' && groupsOf().indexOf('冷冻') < 0;
+  })());
+  chk('删分类不删食材，全部挪到「其他」', (function(){
+    var ok = deleteGroup('冻品');
+    return ok && gOf(kid) === '其他' && gOf('beef') === '其他' &&
+           groupsOf().indexOf('冻品') < 0 && !!invAll(kid);
+  })());
+  chk('只剩一个分类时删不掉', (function(){
+    var g = groupsOf().slice();
+    state.groups = ['唯一一类'];
+    var ok = deleteGroup('唯一一类');
+    state.groups = g;
+    return !ok;
+  })());
+  chk('分类页列出每一类和数量', (function(){
+    var sc = sheetCat();
+    return sc.indexOf('分类') >= 0 && sc.indexOf('叶菜') >= 0 &&
+           sc.indexOf('样食材') >= 0 && sc.indexOf('catNew') >= 0;
+  })());
+
+  /* ---------- 菜谱用料 ↔ 冰箱库存 ---------- */
+  state.inventory = []; state.ings = {}; state.ingG = {};
+  state.shelf = {}; state.shelfName = {}; state.groups = DEFAULT_GROUPS.slice();
+  var myIng = addCustom('塔菜', 4, '叶菜');
+  chk('自己加的食材，菜谱里也认得出', matchIng('塔菜') === myIng && matchIng('清炒塔菜') === myIng);
+  chk('冰箱里有的用料算「有」', stockedOf(myIng));
+  chk('吃完了就变回「要买」', (function(){
+    invAll(myIng).qty = 0; invPurge();
+    return !stockedOf(myIng);
+  })());
+  chk('菜谱用料标出冰箱有没有', (function(){
+    state.inventory = []; invAdd('tomato', 1);
+    var d = { _new:0, id:'zz', n:'测试菜', cat:'fiber', hand:5, wall:5, fire:'none', vessel:'pan',
+              staple:'tomato', needs:['tomato','beef'], taste:[0,0,0], cuisine:'中式', lv:'L1',
+              m:'1. 做', prep:[], src:'', author:'' };
+    ui.draft = d;
+    var h = sheetRecipe();
+    ui.draft = null;
+    return h.indexOf('ingchip on miss') >= 0 && h.indexOf('缺 1 样') >= 0 && h.indexOf('对得上 1 样') >= 0;
+  })());
+  chk('冰箱页写着几道菜用得到', (function(){
+    state.inventory = []; invAdd('tomato', 1);
+    return invRow(invAll('tomato'), false).indexOf('道菜用得到') >= 0;
+  })());
+  chk('菜谱列表直接标出缺几样料', (function(){
+    state.inventory = []; invAdd('tomato', 1);
+    var h = viewLib();
+    return h.indexOf('缺 ') >= 0 && h.indexOf('料齐') >= 0;
+  })());
+
+  /* ---------- 老数据搬家 ---------- */
+  chk('老数据：两条同名的 cus_ 并成一条', (function(){
+    var keepI = state.ings, keepG = state.ingG, keepInv = state.inventory;
+    state.ings = {}; state.ingG = {}; state.shelfName = {};
+    state.inventory = [
+      { id:'cus_a', qty:1, exp:dstr(3), added:todayStr(), name:'塔菜', custom:1 },
+      { id:'cus_b', qty:2, exp:dstr(4), added:todayStr(), name:'塔菜', custom:1 }
+    ];
+    migrateIngs();
+    var ok = customIds().length === 1 && !!invAll('cus_a') && invAll('cus_a').qty === 3 && !invAll('cus_b');
+    state.ings = keepI; state.ingG = keepG; state.inventory = keepInv;
+    return ok;
+  })());
+  chk('老数据：库存里叫「菠菜」的自动认成内置菠菜', (function(){
+    var keepI = state.ings, keepInv = state.inventory;
+    state.ings = {}; state.ingG = {};
+    state.inventory = [{ id:'cus_c', qty:1, exp:dstr(3), added:todayStr(), name:'菠菜', custom:1 }];
+    migrateIngs();
+    var ok = state.inventory[0].id === 'spinach' && !state.inventory[0].custom && !!invOf('spinach');
+    state.ings = keepI; state.inventory = keepInv;
+    return ok;
+  })());
+  chk('老数据：菜谱里的 extraIng 也进食材库', (function(){
+    var keepI = state.ings, keepE = state.extraIng, keepInv = state.inventory;
+    state.ings = {}; state.ingG = {}; state.extraIng = { x9:'折耳根' }; state.inventory = [];
+    migrateIngs();
+    var ok = !!state.ings.x9 && state.ings.x9.n === '折耳根' && matchIng('折耳根') === 'x9';
+    state.ings = keepI; state.extraIng = keepE; state.inventory = keepInv;
+    return ok;
+  })());
+
+  state.inventory = []; state.ings = {}; state.ingG = {};
+  state.shelf = {}; state.shelfName = {}; state.groups = DEFAULT_GROUPS.slice();
+
   state.shelf = {}; state.shelfName = {};
   chk('恢复推荐值后回到默认', shelfDays('tomato') === SHELF.tomato.d);
-  chk('保质期设置页列出全部生鲜', (function(){
+  chk('保质期设置页列出全部生鲜，并能进分类管理', (function(){
     var sh = sheetShelf();
-    return sh.indexOf('保质期设置') >= 0 && sh.indexOf('菠菜') >= 0 && sh.indexOf('牛里脊') >= 0 && sh.indexOf('自己加的') >= 0;
+    return sh.indexOf('保质期设置') >= 0 && sh.indexOf('菠菜') >= 0 && sh.indexOf('牛里脊') >= 0 &&
+           sh.indexOf('管理分类') >= 0;
+  })());
+  chk('自建食材在保质期页标成「自己加的」', (function(){
+    var keep = state.ings;
+    state.ings = {}; var u = addCustom('塔菜', 4, '叶菜');
+    var sh = sheetShelf();
+    state.inventory = []; state.ings = keep;
+    return sh.indexOf('塔菜') >= 0 && sh.indexOf('自己加的') >= 0;
   })());
 
   chk('设置页：显示占用存储，数字是当场算的', (function(){
