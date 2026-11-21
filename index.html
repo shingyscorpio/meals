@@ -395,7 +395,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 13:20';
+var BUILD = '2026-11-21 14:41';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -406,6 +406,27 @@ function todayStr(){ return dstr(0); }
 function daysBetween(a,b){
   var t1 = new Date(a + 'T00:00:00').getTime(), t2 = new Date(b + 'T00:00:00').getTime();
   return Math.round((t2 - t1) / 86400000);
+}
+function isWeekendDate(ds){
+  var w = new Date(String(ds) + 'T00:00:00').getDay();
+  return w === 0 || w === 6;
+}
+/* 推荐的到底是哪一顿早饭：下午 3 点前算「今天这顿」，之后算明天早上。
+   跟这个应用本身的用法一致——头天晚上备料、第二天早上开火。
+   不这么分的话，周五晚上排周六的菜会被当成工作日，周末菜永远排不上 */
+function mealDate(){
+  return new Date().getHours() >= 15 ? dstr(1) : dstr(0);
+}
+function weekendMode(){ return isWeekendDate(mealDate()); }
+function weekdayName(ds){
+  return ['周日','周一','周二','周三','周四','周五','周六'][new Date(String(ds) + 'T00:00:00').getDay()];
+}
+/* 今日页那句提示：把「按哪天判」和「能不能排周末菜」都说出来，别让人猜 */
+function wkHint(){
+  var md = mealDate();
+  var when = (md === todayStr()) ? '今天' : '明天';
+  return when + '是' + weekdayName(md) +
+    (isWeekendDate(md) ? ' · 可以排费工夫的周末菜' : ' · 只从工作日菜里排');
 }
 
 function seedInventory(){
@@ -452,6 +473,9 @@ function load(){
             Object.keys(dft[k]).forEach(function(k2){ if(s[k][k2] === undefined) s[k][k2] = dft[k][k2]; });
           }
         });
+        /* 老数据没有「哪天的菜」这一栏，按做法补一次；
+           已经有值（包括你手动改成工作日的 0）就一律不动 */
+        (s.recipes || []).forEach(function(r){ if(r && r.wk == null) r.wk = guessWeekend(r); });
         return s;
       }
     }
@@ -922,7 +946,7 @@ function emptyDraft(cat){
     staple:'', needs:[], taste:[0,0,0], cuisine:'中式', lv:'L2', cap:null, red:0, fiber:0,
     m:'', prep:[], note:'', unknown:[], src:'', author:'',
     /* _auto：这一项还是「机器猜的」——用户点一下改，就不再覆盖了 */
-    _auto:{cat:1, time:1, fire:1, vessel:1}, _more:0, _pad:0
+    _auto:{cat:1, time:1, fire:1, vessel:1, wk:1}, _more:0, _pad:0
   };
 }
 function draftFrom(it){
@@ -938,7 +962,7 @@ function draftFrom(it){
   });
   d.unknown = [];
   /* 已经存下来的菜谱，字段都是人定过的，不要再被推断覆盖 */
-  d._auto = {cat:0, time:0, fire:0, vessel:0};
+  d._auto = {cat:0, time:0, fire:0, vessel:0, wk:0};
   return d;
 }
 function prepToText(arr){
@@ -999,6 +1023,36 @@ function autoLeft(d){
 
 /* 从菜名 + 做法 + 用料里把能推的全推出来。
    分类、红肉、纤维、口味、菜系、难度都是内部字段，不给用户看 */
+/* 「费时费功夫」不能只看分钟：烤箱、炖锅是挂着等，动手反而少，但备料、翻面、
+   收拾确实占掉一个早上。按信号累加打分，够 4 分算周末菜。
+   分钟门槛照这个库的实际分布定：动手普遍 6~10，全程 9~20，
+   所以「动手 12 分钟」已经算重的了 */
+function weekendWhy(it){
+  var txt = String((it && it.m) || '');
+  var steps = txt.split('\n').filter(function(s){ return s.trim(); }).length;
+  var nIng = ((it && it.needs) || []).length;
+  var hand = Number(it && it.hand) || 0;
+  var wall = Number(it && it.wall) || 0;
+  var prep = ((it && it.prep) || []).reduce(function(a, p){ return a + (Number(p.min) || 0); }, 0);
+  var all = txt + ' ' + String((it && it.n) || '');
+  var sc = 0, why = [];
+  /* 步骤数只给 1 分：补录的菜常被拆成七八条细步骤，条数多不代表费工 */
+  if(steps >= 6){ sc++; }
+  if(steps >= 9){ sc++; why.push('步骤 ' + steps + ' 道'); }
+  if(nIng >= 10){ sc++; why.push('用料 ' + nIng + ' 样'); }
+  if(/腌|浸泡|泡发|发面|醒面|隔夜|解冻/.test(all)){ sc += 2; why.push('要等'); }
+  if(/炖|焖|红烧|卤|煲|煨/.test(all)){ sc += 2; why.push('炖煮'); }
+  /* 「炸」得写具体：手撕包菜里那句「五花肉炸到微焦」不是炸菜 */
+  if(/烤箱|空气炸锅|油炸|炸至|复炸|煎炸|炸到金黄/.test(all)){ sc += 2; why.push('烤/炸'); }
+  if(/卷|包起来|酿|塑形|摆盘/.test(all)){ sc++; why.push('手工活'); }
+  /* 要同时开两摊（一边蒸饭一边炒料），早上最占人 */
+  if(/蒸米饭|煮饭|另起|同时|另炒|一边/.test(all)){ sc++; why.push('两摊并行'); }
+  if(hand >= 12){ sc += 2; why.push('动手 ' + hand + ' 分钟'); }
+  if(wall >= 25){ sc++; why.push('全程 ' + wall + ' 分钟'); }
+  if(prep >= 15){ sc++; why.push('备料 ' + prep + ' 分钟'); }
+  return {wk: sc >= 3 ? 1 : 0, sc: sc, why: why};
+}
+function guessWeekend(it){ return weekendWhy(it).wk; }
 function inferRecipe(d){
   var ing = d.needs || [];
   var txt = (d.n || '') + ' ' + (d.m || '');
@@ -1049,6 +1103,7 @@ function inferRecipe(d){
   }
   d.cuisine = /泰/.test(txt) ? '泰式' : (/(沙拉|吐司|三明治|意面|芝士|黄油|烤)/.test(txt) ? '西式' : '中式');
   if(!d.staple || a.cat) d.staple = ing[0] || d.staple || '';
+  if(a.wk) d.wk = guessWeekend(d);
   d.lv = d.hand <= 4 ? 'L2' : 'L1';
   return d;
 }
@@ -1109,12 +1164,14 @@ function sheetRecipe(){
     h += arow('放哪一格', 'dcat', [['protein','蛋白'],['fiber','纤维'],['carb','碳水']], d.cat);
     h += arow('早上要多久', 'dtime', TIME_OPTS, timeKey(d));
     h += arow('要守着锅吗', 'dfire', [['watch','要盯锅'],['none','不用看'],['off','不开火']], d.fire);
+    h += arow('哪天的菜', 'dwhen', [['wd','工作日'],['we','周末']], d.wk ? 'we' : 'wd');
     h += '</div>';
     h += '<div style="text-align:right;margin-top:2px">' +
          '<button class="linkbtn" data-act="dauto">收起</button></div>';
   } else {
     h += '<div class="autoline"><span class="autoval">' +
          CATN[d.cat] + ' · ' + TIMEN[timeKey(d)] + ' · ' + FIREN[d.fire] +
+         (d.wk ? ' · 周末菜' : '') +
          '</span><button class="ghost" data-act="dauto">不对，改</button></div>';
   }
 
@@ -1294,7 +1351,7 @@ function toDraft(d){
   var cat = d.cat || guessCat(d.needs || []);
   var base = emptyDraft(cat);
   Object.keys(base).forEach(function(k){ if(d[k] == null) d[k] = base[k]; });
-  d._auto = {cat:1, time:1, fire:1, vessel:1};
+  d._auto = {cat:1, time:1, fire:1, vessel:1, wk:1};
   if(!d.n) d.n = '导入的菜';
   return inferRecipe(d);
 }
@@ -1535,6 +1592,7 @@ function normItem(it){
   it.needs = Array.isArray(it.needs) ? it.needs : [];
   it.taste = (Array.isArray(it.taste) && it.taste.length === 3) ? it.taste : [0, 0, 0];
   it.prep = Array.isArray(it.prep) ? it.prep : [];
+  it.wk = it.wk ? 1 : 0;
   if(it.hand == null) it.hand = 5;
   if(it.wall == null) it.wall = it.hand;
   return it;
@@ -1575,6 +1633,8 @@ function saveRecipe(d){
   if(d.cap != null) item.cap = d.cap;
   if(d.red) item.red = 1;
   if(d.fiber) item.fiber = 1;
+  /* 整条替换：写成 1 才留，改成工作日就不写，旧值不会挂着 */
+  if(d.wk) item.wk = 1;
   if(d.ext) item.ext = 1;
   /* key 是「这道菜从包里来」的凭证。编辑一次就丢的话，下次装包会当成新菜再加一条 */
   if(d.key) item.key = d.key;
@@ -1767,7 +1827,7 @@ function slotsOf(combo){
   return [combo.protein, combo.fiber, combo.carb].filter(Boolean);
 }
 
-function evaluate(combo, date){
+function evaluate(combo, date, opts){
   var win = state.settings.window;
   /* 脂肪是加料，不参与硬约束与打分；只用三道菜来判定 */
   var slots = [combo.protein, combo.fiber, combo.carb].filter(Boolean);
@@ -1851,6 +1911,10 @@ function evaluate(combo, date){
   if(hand > win - 3) s -= 1.5;
   if(hand > win - 1) s -= 4;
 
+  /* 周末菜加成：只在周末模式生效。周末菜本来就贵工夫，
+     不加这一下，它们跟快手菜平起平坐，永远排不出来 */
+  if(opts && opts.wk && slots.some(function(x){ return x.wk; })) s += 4;
+
   /* 口味搭配：权重为 0，只记录 */
   var taste = tastePenalty(slots);
   s += TASTE_W * taste.pen;
@@ -1875,9 +1939,12 @@ function tastePenalty(slots){
   return {pen:p, hits:hits};
 }
 
-function enumerate(date){
+function enumerate(date, allowWk){
   var out = [];
-  var P = pool('protein'), F = pool('fiber'), C = pool('carb');
+  /* 工作日只从工作日菜里排。这道闸设在候选池，不设在打分里——
+     打分能让周末菜排上来，也能让它们挤掉仅有的几个快手菜 */
+  var dayOk = function(x){ return allowWk || !x.wk; };
+  var P = pool('protein').filter(dayOk), F = pool('fiber').filter(dayOk), C = pool('carb').filter(dayOk);
   var sk = state.today.skipped || [];
   var lk = state.today.locks || {};
 
@@ -1896,7 +1963,7 @@ function enumerate(date){
         } else if(lk.fiber){ continue; }
         {
           var combo = {protein:P[i], fiber:f, carb:C[j]};
-          var ev = evaluate(combo, date);
+          var ev = evaluate(combo, date, {wk:!!allowWk});
           if(ev.ok) out.push({combo:combo, ev:ev});
         }
       }
@@ -1914,13 +1981,22 @@ function enumerate(date){
   return out;
 }
 
-function recommend(){
-  var list = enumerate(todayStr());
+function recommend(allowWk){
+  var wk = (allowWk == null) ? weekendMode() : !!allowWk;
+  var list = enumerate(todayStr(), wk);
   if(!list.length){
     state.today.skipped = [];
     state.today.locks = {};
-    list = enumerate(todayStr());
+    list = enumerate(todayStr(), wk);
     if(list.length) toast('今天备选差不多了，从头再给你排');
+  }
+  /* 整格都是周末菜、或者都被限量和 7 天规则挡住时，别让人对着一句
+     「凑不出三样」发呆：放开周末菜，但说清是破例 */
+  if(!list.length && !wk){
+    state.today.skipped = [];
+    state.today.locks = {};
+    list = enumerate(todayStr(), true);
+    if(list.length) toast('工作日菜凑不出一顿，今天破例排了周末菜');
   }
   return list.length ? list[0] : null;
 }
@@ -2206,6 +2282,7 @@ function viewToday(){
 
   h += '<div class="card">';
   h += '<div class="card-h"><span>今天给你排好了</span><b>' + ev.hand + '′ 动手</b></div>';
+  h += '<div class="hint" style="margin:-3px 0 9px">' + wkHint() + '</div>';
 
   var slotsDef = [
     {k:'protein', label:'蛋白'},
@@ -2343,6 +2420,7 @@ function viewLib(){
     var tags = '<span class="tag">' + it.wall + '′</span>' +
                '<span class="tag' + (it.fire === 'watch' ? ' warn' : '') + '">' + FIRE[it.fire] + '</span>' +
                (it.ext ? '<span class="tag">补录</span>' : '') +
+               (it.wk ? '<span class="tag ok">周末</span>' : '') +
                (it.cap != null ? '<span class="tag warn">限量 ' + (it.cap < 1 ? '两周 1 次' : '每周 ' + it.cap + ' 次') + '</span>' : '') +
                (it.red ? '<span class="tag warn">红肉</span>' : '');
     var mTxt = it.m || '';
@@ -2539,9 +2617,11 @@ function sheetSettings(){
          '<span style="font-size:12.5px;color:#8A8478">' + state.hidden.length + ' 道</span></div>';
     h += '<div style="margin-top:8px"><button class="btn btn-ghost" data-act="rRestore" style="width:100%">全部恢复</button></div>';
   }
+  var liveRecipes = state.recipes.filter(function(x){ return state.hidden.indexOf(x.id) < 0; });
+  var wkCount = liveRecipes.filter(function(x){ return x.wk; }).length;
   h += '<div class="setrow" style="margin-top:8px"><span>自己加的菜谱</span>' +
-       '<span style="font-size:12.5px;color:#8A8478">' +
-       state.recipes.filter(function(x){ return state.hidden.indexOf(x.id) < 0; }).length + ' 道</span></div>';
+       '<span style="font-size:12.5px;color:#8A8478">' + liveRecipes.length + ' 道' +
+       '<span style="color:#A9A398">（周末 ' + wkCount + '）</span></span></div>';
 
   /* 存了多少：localStorage 按 UTF-16 存，一个字符算 2 字节，配额一般 5 MB */
   var used = storeBytes();
@@ -2606,6 +2686,8 @@ function mergePack(list){
     /* 两个键都查：改了名字的认 key，手工粘来的（没有 key）认名字 */
     if(haveKey[packKey(src)] || haveName[src.n]){ dup++; return; }
     var it = JSON.parse(JSON.stringify(src));
+    /* 包里没标就现算：补录的菜是机器排版出来的，靠文字特征比靠人手点准 */
+    if(it.wk == null) it.wk = guessWeekend(it);
     var base = it.id || ('m' + Date.now().toString(36) + added);
     var id = base, k = 2;
     while(used[id]){ id = base + '_' + k; k++; }
@@ -3063,6 +3145,7 @@ document.addEventListener('click', function(e){
     renderSheet();
   }
   else if(act === 'dfire'){ readForm(); ui.draft.fire = el.dataset.v; ui.draft._auto.fire = 0; renderSheet(); }
+  else if(act === 'dwhen'){ readForm(); ui.draft.wk = el.dataset.v === 'we' ? 1 : 0; ui.draft._auto.wk = 0; renderSheet(); }
   else if(act === 'dmore'){ readForm(); ui.draft._more = ui.draft._more ? 0 : 1; renderSheet(); }
   else if(act === 'dpad'){
     readForm();
@@ -3578,6 +3661,127 @@ if(location.search.indexOf('test') >= 0){
     var sh = sheetSettings();
     return sh.indexOf('导出备份') >= 0 && sh.indexOf('导入备份') >= 0 &&
            sh.indexOf('data-act="bkOpen"') >= 0 && sh.indexOf('data-act="rsOpen"') >= 0;
+  })());
+
+  /* ---------- 工作日 / 周末 ---------- */
+  chk('周末菜：快手菜判工作日，费工菜判周末', (function(){
+    var by = function(n){ return SEED.filter(function(x){ return x.n === n; })[0]; };
+    var quick = ['手撕包菜', '蚝油香菇油菜', '肉末嫩豆腐', '番茄炒蛋'];
+    var heavy = ['金针菇培根卷', '西红柿炒茄子', '生菜牛肉拌饭'];
+    var bad = [];
+    quick.forEach(function(n){ if(guessWeekend(by(n)) !== 0) bad.push(n + ' 被当成周末菜'); });
+    heavy.forEach(function(n){ if(guessWeekend(by(n)) !== 1) bad.push(n + ' 没判成周末菜'); });
+    return bad.length === 0;
+  })());
+
+  chk('周末菜：装包时没标的自动补上', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = []; state.hidden = []; rebuildItems();
+    var r = mergePack([{ id:'w1', n:'红烧排骨', cat:'protein', hand:8, wall:40, needs:['pork'],
+                         m:'1. 排骨焯水。\n2. 炒糖色。\n3. 加水小火炖 40 分钟。' }]);
+    var got = findItem('w1');
+    var out = r.added === 1 && !!got && got.wk === 1;
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('周末菜：包里明确标了工作日的，不覆盖', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = []; state.hidden = []; rebuildItems();
+    mergePack([{ id:'w2', n:'炖菜', cat:'protein', hand:8, wall:40, wk:0, needs:['pork'],
+                 m:'1. 下锅炖 40 分钟。' }]);
+    var got = findItem('w2');
+    var out = !!got && got.wk === 0;
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('工作日只从工作日菜里排，周末确实会排周末菜', (function(){
+    var bak = state.recipes.slice();
+    /* 包里的 wk 可能还没写，这里现补一遍，保证用例真的在测过滤 */
+    state.recipes = state.recipes.map(function(x){
+      var o = Object.assign({}, x); o.wk = guessWeekend(x); return o;
+    });
+    rebuildItems();
+    var strict = enumerate(todayStr(), false);
+    var loose = enumerate(todayStr(), true);
+    var hasWk = function(x){ return slotsOf(x.combo).some(function(i){ return i.wk; }); };
+    var out = strict.length > 0 &&
+              !strict.some(hasWk) &&
+              loose.some(hasWk);
+    state.recipes = bak; rebuildItems();
+    return out;
+  })());
+
+  chk('周末加成：同一份餐，周末模式分数更高', (function(){
+    var bak = state.recipes.slice();
+    state.recipes = state.recipes.map(function(x){
+      var o = Object.assign({}, x); o.wk = guessWeekend(x); return o;
+    });
+    rebuildItems();
+    /* 取一个含周末菜的组合来比，否则加成不生效、分数本来就相等 */
+    var c = enumerate(todayStr(), true).filter(function(x){
+      return slotsOf(x.combo).some(function(i){ return i.wk; });
+    })[0];
+    var out = !!c && evaluate(c.combo, todayStr(), {wk:true}).score > evaluate(c.combo, todayStr()).score;
+    state.recipes = bak; rebuildItems();
+    return out;
+  })());
+
+  chk('工作日菜凑不出一顿时，破例放开周末菜而不是空着', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    var bakToday = JSON.parse(JSON.stringify(state.today));
+    /* 蛋白格全变成周末菜 → 严格模式必然排不出 */
+    state.recipes = state.recipes.map(function(x){
+      var o = Object.assign({}, x); o.wk = (x.cat === 'protein') ? 1 : 0; return o;
+    });
+    state.hidden = []; rebuildItems(); resetToday();
+    var strictEmpty = enumerate(todayStr(), false).length === 0;
+    var r = recommend(false);
+    var out = strictEmpty && !!r && slotsOf(r.combo).some(function(i){ return i.wk; });
+    state.recipes = bak; state.hidden = bakH; state.today = bakToday; rebuildItems();
+    return out;
+  })());
+
+  chk('改成工作日能存下去（不是只写 1 不写 0）', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = []; state.hidden = []; rebuildItems();
+    var d = emptyDraft('fiber');
+    d.id = 'wk1'; d.n = '测试菜'; d.wk = 1; d.m = '1. 做';
+    saveRecipe(d);
+    var a = (findItem('wk1') || {}).wk;
+    var d2 = draftFrom(findItem('wk1'));
+    d2.wk = 0;
+    saveRecipe(d2);
+    var b = (findItem('wk1') || {}).wk;
+    var out = a === 1 && b === 0;
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('编辑器有「哪天的菜」，能点着改', (function(){
+    var bakDraft = ui.draft, bakOpen = ui.autoOpen, bakType = ui.sheetType;
+    ui.draft = emptyDraft('fiber'); ui.draft.n = '测试'; ui.sheetType = 'recipe'; ui.autoOpen = true;
+    var h = sheetRecipe();
+    var out = h.indexOf('哪天的菜') >= 0 && h.indexOf('data-act="dwhen"') >= 0;
+    ui.draft = bakDraft; ui.autoOpen = bakOpen; ui.sheetType = bakType;
+    return out;
+  })());
+
+  chk('菜谱列表给周末菜打「周末」标', (function(){
+    var bak = state.recipes.slice();
+    state.recipes = state.recipes.map(function(x, i){
+      var o = Object.assign({}, x); o.wk = (i === 0) ? 1 : 0; return o;
+    });
+    rebuildItems();
+    var out = viewLib().indexOf('>周末<') >= 0;
+    state.recipes = bak; rebuildItems();
+    return out;
+  })());
+
+  chk('今日页说清按哪天判、能不能排周末菜', (function(){
+    var h = wkHint();
+    return /(今天|明天)是周/.test(h) && /(周末菜|工作日菜)/.test(h);
   })());
 
   chk('设置页：有装菜谱包入口', (function(){
