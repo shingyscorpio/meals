@@ -387,6 +387,7 @@ var BUILTIN = [];
 var ITEMS = [];   /* 运行时生效的池子：由 rebuildItems() 用你自己存的菜谱 − 删掉的 重新填 */
 
 var FIRE = {watch:'要盯锅', none:'不用看火', off:'不开火'};
+var CAT_NAME = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
 var DEVN = {microwave:'微波', airfryer:'空气炸锅', water:'水锅', pan:'炒锅', steamer:'蒸屉', pre:'昨晚已做', none:'免火'};
 var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
 
@@ -395,7 +396,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 15:21';
+var BUILD = '2026-11-21 15:30';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -1780,11 +1781,16 @@ function recipesUsing(id){
   return ITEMS.filter(function(x){ return (x.needs || []).indexOf(id) >= 0; });
 }
 
+/* 一顿可能是三样、也可能是你多加的两道。历史里 p/f/c 只放三样，
+   多加的放 x，凡是要按「这道菜吃过没有」判断的地方都得看全 */
+function histIds(h){
+  return [h.p, h.f, h.c].concat(h.x || []).filter(Boolean);
+}
 function eatenDaysAgo(id){
   var best = null;
   state.history.forEach(function(h){
     if(h.date === todayStr()) return;
-    if([h.p,h.f,h.c].indexOf(id) >= 0){
+    if(histIds(h).indexOf(id) >= 0){
       var d = daysBetween(h.date, todayStr());
       if(best === null || d < best) best = d;
     }
@@ -1796,7 +1802,7 @@ function stapleDaysAgo(staple){
   var best = null;
   state.history.forEach(function(h){
     if(h.date === todayStr()) return;
-    var ids = [h.p,h.f,h.c].filter(Boolean);
+    var ids = histIds(h);
     var hit = ids.some(function(id){ var it = findItem(id); return it && it.staple === staple; });
     if(hit){
       var d = daysBetween(h.date, todayStr());
@@ -1810,7 +1816,7 @@ function stapleDaysAgo(staple){
 function weekCount(id, span){
   var n = 0, w = span || 7;
   state.history.forEach(function(h){
-    if(daysBetween(h.date, todayStr()) < w && [h.p,h.f,h.c].indexOf(id) >= 0) n++;
+    if(daysBetween(h.date, todayStr()) < w && histIds(h).indexOf(id) >= 0) n++;
   });
   return n;
 }
@@ -1818,20 +1824,22 @@ function redCountWeek(){
   var n = 0;
   state.history.forEach(function(h){
     if(daysBetween(h.date, todayStr()) >= 7) return;
-    var ids = [h.p,h.f,h.c].filter(Boolean);
+    var ids = histIds(h);
     if(ids.some(function(id){ var it = findItem(id); return it && it.red; })) n++;
   });
   return n;
 }
 
 function slotsOf(combo){
-  return [combo.protein, combo.fiber, combo.carb].filter(Boolean);
+  /* extra = 你自己多加的菜：可以再来一道蛋白、再来一道蔬菜。
+     它们跟主菜一样算动手时间、算器具、算 7 天重复，只是不参与自动排菜 */
+  return [combo.protein, combo.fiber, combo.carb].concat(combo.extra || []).filter(Boolean);
 }
 
 function evaluate(combo, date, opts){
   var win = state.settings.window;
-  /* 脂肪是加料，不参与硬约束与打分；只用三道菜来判定 */
-  var slots = [combo.protein, combo.fiber, combo.carb].filter(Boolean);
+  /* 脂肪是加料，不参与硬约束与打分；多加的菜一起算 */
+  var slots = slotsOf(combo);
   var hand = slots.reduce(function(a,x){ return a + x.hand; }, 0);
   /* force = 人点名要这道菜。这时不返回失败，而是把违规全收齐往下算：
      界面要显示动手分钟、要洗几件锅，光一个 why 是渲染不出来的 */
@@ -2115,7 +2123,7 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            draft:null, impMsg:null, pasteTxt:'', ingQ:'',
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
-           cusName:'', cusDays:null };
+           cusName:'', cusDays:null, addMode:false };
 (function(){
   var t = (location.hash || '').replace('#','');
   if(['today','fridge','lib','log'].indexOf(t) >= 0) ui.tab = t;
@@ -2135,8 +2143,17 @@ function reroll(){
   /* 今天已经记过账就先整体回滚（库存 + 历史），否则换一道再记一次，
      前一批扣掉的料就永远回不来了 */
   if(state.today.eaten) undoConsumed();
+  /* 你自己多加的菜要留住：换主菜不该把你加的也一起换掉 */
+  var keep = (state.today.pick && state.today.pick.combo.extra) ? state.today.pick.combo.extra.slice() : [];
   var r = recommend();
-  state.today.pick = r ? {combo:r.combo, ev:r.ev} : null;
+  if(!r){ state.today.pick = null; }
+  else if(!keep.length){ state.today.pick = {combo:r.combo, ev:r.ev}; }
+  else{
+    var c = {protein:r.combo.protein, fiber:r.combo.fiber, carb:r.combo.carb, extra:keep};
+    var ev = evaluate(c, todayStr(), {force:true});
+    state.today.pick = {combo:c, ev:ev};
+    if(!ev.ok) state.today.pick.forced = 1;
+  }
   state.today.eaten = null;
   save(); render();
 }
@@ -2181,11 +2198,52 @@ function pickFromLib(it){
   renderSheet();
 }
 
+/* 多加一道。撞规矩也走「先问、不拦」那条路——跟主菜一个规矩 */
+function addExtra(it){
+  var pick = state.today.pick;
+  if(!pick) return;
+  var c = {protein:pick.combo.protein, fiber:pick.combo.fiber, carb:pick.combo.carb,
+           extra:(pick.combo.extra || []).slice()};
+  if(slotsOf(c).some(function(x){ return x.id === it.id; })){
+    toast('这道已经在今天这顿了'); return;
+  }
+  c.extra.push(it);
+  var ev = evaluate(c, todayStr(), {force:true});
+  if(ev.ok){ applyExtra(c, ev, 0); return; }
+  ui.clash = {combo:c, ev:ev, cat:'extra', name:it.n, mode:'extra'};
+  ui.sheetType = 'clash'; ui.sheet = true; renderSheet();
+}
+
+function applyExtra(c, ev, forced){
+  if(state.today.eaten) undoConsumed();   /* 这顿变了，原来那次记账作废 */
+  state.today.pick = {combo:c, ev:ev};
+  if(forced) state.today.pick.forced = 1;
+  save();
+  toast(forced ? '行，加上这道，规矩这次放宽' : '加上了');
+  ui.sheet = false; ui.sheetType = 'settings';
+  ui.addMode = false; ui.tab = 'today';
+  render(); renderSheet();
+}
+
+function removeExtra(id){
+  var pick = state.today.pick;
+  if(!pick) return;
+  var c = {protein:pick.combo.protein, fiber:pick.combo.fiber, carb:pick.combo.carb,
+           extra:(pick.combo.extra || []).filter(function(x){ return x.id !== id; })};
+  if(state.today.eaten) undoConsumed();
+  var ev = evaluate(c, todayStr(), {force:true});
+  state.today.pick = {combo:c, ev:ev};
+  if(!ev.ok) state.today.pick.forced = 1;   /* 还剩别的问题就继续标出来 */
+  save(); render(); toast('撤掉了');
+}
+
 function clashConfirm(){
   var q = ui.clash;
   ui.clash = null;
   ui.sheetType = 'settings';
-  if(q) applyPick(q.combo, q.ev, 1, q.cat); else renderSheet();
+  if(!q){ renderSheet(); return; }
+  if(q.mode === 'extra') applyExtra(q.combo, q.ev, 1);
+  else applyPick(q.combo, q.ev, 1, q.cat);
 }
 function clashCancel(){
   ui.clash = null; ui.sheet = false; ui.sheetType = 'settings'; renderSheet();
@@ -2239,9 +2297,12 @@ function eat(){
   state.today.eaten = true;
   /* 同一天只留一条：再记一次是「替换今天这顿」，不是追加一顿 */
   state.history = state.history.filter(function(h){ return h.date !== todayStr(); });
-  state.history.unshift({ date:todayStr(), p:c.protein?c.protein.id:null, f:c.fiber?c.fiber.id:null,
-                          c:c.carb?c.carb.id:null,
-                          name:[c.protein&&c.protein.n, c.fiber&&c.fiber.n, c.carb&&c.carb.n].filter(Boolean).join(' + ') });
+  var extraIds = (c.extra || []).map(function(x){ return x.id; });
+  var rec = { date:todayStr(), p:c.protein?c.protein.id:null, f:c.fiber?c.fiber.id:null,
+              c:c.carb?c.carb.id:null,
+              name:slotsOf(c).map(function(x){ return x.n; }).join(' + ') };
+  if(extraIds.length) rec.x = extraIds;
+  state.history.unshift(rec);
   save(); render(); toast('记下了，今晚的活在上面');
 }
 
@@ -2351,6 +2412,7 @@ function viewToday(){
     {k:'fiber',   label:'纤维'},
     {k:'carb',    label:'碳水'}
   ];
+  var extras = c.extra || [];
   slotsDef.forEach(function(sd){
     var it = c[sd.k];
     if(!it){
@@ -2375,6 +2437,25 @@ function viewToday(){
          '<button class="swapbtn" data-act="swap" data-cat="' + sd.k + '">换</button></div>';
   });
 
+  /* 你自己多加的菜：跟主菜一起算时间、算锅，只是不占三类的位置 */
+  extras.forEach(function(it){
+    var meta = (it.wall !== it.hand ? it.hand + '′动手 · ' + it.wall + '′全程' : it.wall + '′') +
+               ' · ' + FIRE[it.fire];
+    var done = eatenDaysAgo(it.id);
+    if(done !== null) meta += ' · ' + done + ' 天前吃过';
+    /* 左边写这道属于哪一格：加了两道蛋白就两行都写「蛋白」，一眼看得出重复 */
+    h += '<div class="slotrow"><div class="slot">' + (CAT_NAME[it.cat] || '加') + '</div>' +
+         '<div class="slotbody"><div class="nm">' + esc(it.n) + '</div>' +
+         '<div class="mt">' + meta + '</div></div>' +
+         '<button class="swapbtn" data-act="unextra" data-id="' + it.id + '">撤</button></div>';
+  });
+  h += '<div class="slotrow" style="border-top:1px dashed #F0ECE3">' +
+       '<div class="slot">＋</div>' +
+       '<div class="slotbody"><div class="nm" style="color:#3C6B4F;font-size:12.5px">' +
+       (extras.length ? '还想再加一道？' : '想多吃一道就加，不限于三样') + '</div>' +
+       '<div class="mt">多加的会算进动手分钟和要洗的锅</div></div>' +
+       '<button class="swapbtn" data-act="addmore">加</button></div>';
+
   h += '</div>';
 
   /* 统计条 */
@@ -2386,7 +2467,8 @@ function viewToday(){
   h += '<div class="foot">窗口 ' + win + ' 分钟，用掉 ' + ev.hand + '，剩 ' + Math.max(0, win - ev.hand) + ' 分钟冗余</div>';
 
   /* 为什么 */
-  h += '<div class="card" style="margin-top:12px"><div class="card-h"><b>为什么是这三样</b></div><div class="why">';
+  h += '<div class="card" style="margin-top:12px"><div class="card-h"><b>' +
+       (extras.length ? '为什么这么配' : '为什么是这三样') + '</b></div><div class="why">';
   whyLines(c, ev).forEach(function(t){ h += '<div><i>·</i><span>' + esc(t) + '</span></div>'; });
   h += '</div>';
   if(ev.taste.hits.length){
@@ -2462,6 +2544,12 @@ function dateLabel(){
 function viewLib(){
   var cats = [{k:'all',n:'全部'},{k:'protein',n:'蛋白'},{k:'fiber',n:'纤维'},{k:'carb',n:'碳水'}];
   var h = '<div class="top"><div><div class="date">共 ' + ITEMS.length + ' 条</div><h1>菜谱</h1></div></div>';
+  if(ui.addMode){
+    h += '<div class="pendbar" style="cursor:default">正在给今天这顿加菜——点任意一道后面的「加」就放进去，' +
+         '可以多加几道，三类不限。<div style="margin-top:8px">' +
+         '<button class="btn btn-ghost" data-act="adddone" style="font-size:12.5px;padding:6px 12px">回到今天</button>' +
+         '</div></div>';
+  }
   var pendN = (state.pending || []).length;
   h += '<div class="actions" style="margin:0 0 12px">' +
        '<button class="btn btn-primary" data-act="rNew" style="font-size:14px">＋ 加一道菜</button>' +
@@ -2491,7 +2579,8 @@ function viewLib(){
     var open = !!ui.openM[it.id];
     h += '<div class="rc"><div class="r1"><span class="n">' + esc(it.n) + '</span>' +
          (inCombo ? '<span class="tag ok">在今天的餐里</span>'
-                  : '<button data-act="use" data-id="' + it.id + '">换这个</button>') +
+                  : '<button data-act="use" data-id="' + it.id + '">' +
+                    (ui.addMode ? '加' : '换这个') + '</button>') +
          '<button data-act="rEdit" data-id="' + it.id + '" title="编辑" ' +
            'style="background:none;color:#A9A398;padding:4px 6px;font-size:14px">✎</button>' +
          '</div><div class="r2">' + tags + srcLink(it.src) + authorTag(it) + '</div>' +
@@ -2666,18 +2755,21 @@ function renderSheet(){
    但人一旦点名要某道菜，决定权在人手上 */
 function sheetClash(){
   var q = ui.clash;
+  var isExtra = !!(q && q.mode === 'extra');
   if(!q) return '<h3>已取消</h3><div style="margin-top:14px">' +
     '<button class="btn btn-ghost" data-act="closesheet" style="width:100%">关闭</button></div>';
   var viol = (q.ev && q.ev.viol) || [];
   var h = '<h3>「' + esc(q.name) + '」不太合规矩</h3>';
   h += '<div class="impinfo" style="background:#FAF3E4;border-color:#EDE2C8;color:#8A6A2E;line-height:1.7">' +
-       '自动排菜会避开这些，免得天天撞。你自己想吃就吃——确认一下就排上，不影响别的东西。' +
+       '自动排菜会避开这些，免得天天撞。你自己想吃就吃——确认一下就' +
+       (isExtra ? '加上，其余保持不动' : '排上，不影响别的东西') + '。' +
        (viol.length ? '<div style="margin-top:7px">' +
          viol.map(function(v){ return '· ' + esc(v); }).join('<br>') + '</div>' : '') +
        '</div>';
   h += '<div class="actions">' +
        '<button class="btn btn-ghost" data-act="clashNo" style="flex:1;font-size:14px">算了</button>' +
-       '<button class="btn btn-primary" data-act="clashYes" style="flex:1;font-size:14px">就要这道</button>' +
+       '<button class="btn btn-primary" data-act="clashYes" style="flex:1;font-size:14px">' +
+         (isExtra ? '加上这道' : '就要这道') + '</button>' +
        '</div>';
   return h;
 }
@@ -3145,6 +3237,7 @@ document.addEventListener('click', function(e){
   var el = e.target.closest('[data-act],[data-tab]');
   if(!el) return;
   if(el.dataset.tab){
+    ui.addMode = false;   /* 换页就退出加菜模式，免得下次点「换这个」变成加菜 */
     ui.tab = el.dataset.tab;
     render();
     return;
@@ -3158,7 +3251,13 @@ document.addEventListener('click', function(e){
   else if(act === 'eat'){ eat(); }
   else if(act === 'undoEat'){ undoTodaysEat(); }
   else if(act === 'libcat'){ ui.libCat = el.dataset.cat; render(); }
-  else if(act === 'use'){ pickFromLib(findItem(id)); }
+  else if(act === 'use'){
+    var _it = findItem(id);
+    if(ui.addMode) addExtra(_it); else pickFromLib(_it);
+  }
+  else if(act === 'addmore'){ ui.addMode = true; ui.tab = 'lib'; ui.libCat = 'all'; render(); }
+  else if(act === 'adddone'){ ui.addMode = false; ui.tab = 'today'; render(); }
+  else if(act === 'unextra'){ removeExtra(id); }
   else if(act === 'clashYes'){ clashConfirm(); }
   else if(act === 'clashNo'){ clashCancel(); }
   else if(act === 'addslot'){ ui.tab = 'lib'; ui.libCat = el.dataset.cat; render(); }
@@ -4781,6 +4880,165 @@ if(location.search.indexOf('test') >= 0){
     var back = state.history.length === n && !state.today.eaten;
     state.today.pick = null;
     return ate && back;
+  })());
+
+  /* ---------- 多加几道：三类不必各一道 ---------- */
+  /* 前面的用例往历史里塞过 p03、f11，会触发 7 天规则和主料 3 天规则。
+     这一组要测的是「加得进去/加不进去」，先把历史清空，测完还原 */
+  var BASE = function(win){
+    state.__h0 = state.history.slice();
+    state.history = [];
+    var c = {protein:findItem('p04'), fiber:findItem('f02'), carb:findItem('c12')};
+    state.today.pick = {combo:c, ev:evaluate(c, todayStr())};
+    state.today.skipped = []; state.today.locks = {}; state.today.eaten = null;
+    ui.clash = null; ui.sheet = false; ui.sheetType = 'settings'; ui.addMode = true;
+    state.settings.window = win || 30;
+    return c;
+  };
+  var DONE = function(){
+    state.history = state.__h0;
+    state.today.pick = null;
+    ui.addMode = false; ui.clash = null; ui.sheet = false; ui.sheetType = 'settings';
+    state.settings.window = 15;
+  };
+
+  chk('多加一道：三类之外还能再来一道，时间跟着涨', (function(){
+    BASE(30);
+    var beforeHand = state.today.pick.ev.hand;
+    addExtra(findItem('f06'));
+    var e = state.today.pick.combo.extra || [];
+    var ok = e.length === 1 && e[0].id === 'f06' &&
+             slotsOf(state.today.pick.combo).length === 4 &&
+             state.today.pick.ev.hand > beforeHand &&
+             ui.addMode === false;
+    DONE();
+    return ok;
+  })());
+
+  chk('多加一道：能再来一道蛋白，同一道不许放两次', (function(){
+    BASE(30);
+    /* 得挑一道不盯锅的蛋白：底稿里 p04 已经在盯锅，再加一道盯锅的就撞约束了 */
+    var np = ITEMS.filter(function(x){
+      return x.cat === 'protein' && x.fire !== 'watch' && x.id !== 'p04';
+    })[0];
+    if(!np){ DONE(); return true; }
+    addExtra(np);                         /* 第二道蛋白 */
+    var one = (state.today.pick.combo.extra || []).length;
+    addExtra(np);                         /* 同一道再点一次 */
+    var two = (state.today.pick.combo.extra || []).length;
+    var dup = slotsOf(state.today.pick.combo).filter(function(x){ return x.id === np.id; }).length;
+    var ok = one === 1 && two === 1 && dup === 1 && np.cat === 'protein';
+    DONE();
+    return ok;
+  })());
+
+  chk('多加一道撞约束：先问，确认才加', (function(){
+    BASE(15);
+    addExtra(findItem('p07'));
+    var asked = ui.sheetType === 'clash' && !!ui.clash && ui.clash.mode === 'extra';
+    var notYet = !(state.today.pick.combo.extra || []).length;
+    clashConfirm();
+    var ok = asked && notYet &&
+             (state.today.pick.combo.extra || []).length === 1 &&
+             state.today.pick.forced === 1 &&
+             (state.today.pick.ev.viol || []).length > 0;
+    DONE();
+    return ok;
+  })());
+
+  chk('多加一道撞约束：说「算了」就不加', (function(){
+    BASE(15);
+    addExtra(findItem('p07'));
+    clashCancel();
+    var ok = !(state.today.pick.combo.extra || []).length &&
+             ui.clash === null && ui.sheet === false;
+    DONE();
+    return ok;
+  })());
+
+  chk('撤掉多加的那道：时间回落，标记清掉', (function(){
+    BASE(30);
+    var np = ITEMS.filter(function(x){
+      return x.cat === 'protein' && x.fire !== 'watch' && x.id !== 'p04' && x.hand > 0;
+    })[0];
+    if(!np){ DONE(); return true; }
+    var hand0 = state.today.pick.ev.hand;
+    addExtra(np);
+    var hand1 = state.today.pick.ev.hand;
+    removeExtra(np.id);
+    var ok = hand1 > hand0 &&
+             !(state.today.pick.combo.extra || []).length &&
+             state.today.pick.ev.hand === hand0 &&
+             !state.today.pick.forced;
+    DONE();
+    return ok;
+  })());
+
+  chk('换主菜时，你多加的那道留着', (function(){
+    BASE(30);
+    addExtra(findItem('f06'));
+    reroll();
+    var e = state.today.pick.combo.extra || [];
+    var ok = e.length === 1 && e[0].id === 'f06';
+    DONE();
+    return ok;
+  })());
+
+  chk('记账：多加的菜进历史，7 天规则也认它', (function(){
+    BASE(30);
+    addExtra(findItem('f06'));
+    var n = state.history.length;
+    eat();
+    var rec = state.history[0];
+    var inName = !!rec && rec.name.indexOf(findItem('f06').n) >= 0;
+    var inIds = !!rec && (rec.x || []).indexOf('f06') >= 0;
+    undoTodaysEat();
+    var cleared = state.history.length === n;
+    /* 只看 p/f/c 的话，多吃的这道等于没吃过，7 天内还会被推上来 */
+    state.history = [{date:dstr(-1), p:null, f:null, c:null, x:['f06']}];
+    var seen = eatenDaysAgo('f06') === 1;
+    DONE();
+    return inName && inIds && cleared && seen;
+  })());
+
+  chk('记账：多加那道菜的用料也会扣库存', (function(){
+    BASE(30);
+    var ex = findItem('f06');
+    var fresh = (ex.needs || []).filter(function(id){ return !isPantry(id) && SHELF[id]; })[0];
+    var ok = true;
+    if(fresh){
+      state.inventory = [{id:fresh, qty:3, exp:dstr(5), added:todayStr()}];
+      addExtra(ex);
+      eat();
+      var left = state.inventory.filter(function(x){ return x.id === fresh; })
+                                .reduce(function(a,x){ return a + x.qty; }, 0);
+      ok = left < 3;
+      undoTodaysEat();
+    }
+    state.inventory = [];
+    DONE();
+    return ok;
+  })());
+
+  chk('自动排菜不会自己加菜：新推荐的仍然三类各一道', (function(){
+    BASE(30);
+    state.today.skipped = []; state.today.locks = {};
+    reroll();
+    var c = state.today.pick.combo;
+    var ok = !(c.extra && c.extra.length) && slotsOf(c).length <= 3;
+    DONE();
+    return ok;
+  })());
+
+  chk('今日页：多吃的显示成独立行，带「撤」和「再加一道」', (function(){
+    BASE(30);
+    addExtra(findItem('f06'));
+    var h = viewToday();
+    var ok = h.indexOf('data-act="unextra" data-id="f06"') >= 0 &&
+             h.indexOf('还想再加一道？') >= 0 &&
+             h.indexOf('为什么这么配') >= 0;
+    DONE();
+    return ok;
   })());
 
   chk('库存：补货不会给过期那批续命', (function(){
