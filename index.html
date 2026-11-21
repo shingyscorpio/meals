@@ -395,7 +395,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 14:41';
+var BUILD = '2026-11-21 14:48';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -411,12 +411,13 @@ function isWeekendDate(ds){
   var w = new Date(String(ds) + 'T00:00:00').getDay();
   return w === 0 || w === 6;
 }
-/* 推荐的到底是哪一顿早饭：下午 3 点前算「今天这顿」，之后算明天早上。
-   跟这个应用本身的用法一致——头天晚上备料、第二天早上开火。
+/* 推荐的到底是哪一顿早饭：上午 10 点前算「今天这顿」，10 点之后算明天早上。
+   10 点是「今天已经来不及改了」的分界——过了这时候再选，选的是明早吃什么。
    不这么分的话，周五晚上排周六的菜会被当成工作日，周末菜永远排不上 */
-function mealDate(){
-  return new Date().getHours() >= 15 ? dstr(1) : dstr(0);
+function mealDateFrom(hour){
+  return Number(hour) >= 10 ? dstr(1) : dstr(0);
 }
+function mealDate(){ return mealDateFrom(new Date().getHours()); }
 function weekendMode(){ return isWeekendDate(mealDate()); }
 function weekdayName(ds){
   return ['周日','周一','周二','周三','周四','周五','周六'][new Date(String(ds) + 'T00:00:00').getDay()];
@@ -3777,6 +3778,11 @@ if(location.search.indexOf('test') >= 0){
     var out = viewLib().indexOf('>周末<') >= 0;
     state.recipes = bak; rebuildItems();
     return out;
+  })());
+
+  chk('10 点分界：9 点算今天，10 点起算明天', (function(){
+    return mealDateFrom(0) === todayStr() && mealDateFrom(9) === todayStr() &&
+           mealDateFrom(10) === dstr(1) && mealDateFrom(23) === dstr(1);
   })());
 
   chk('今日页说清按哪天判、能不能排周末菜', (function(){
