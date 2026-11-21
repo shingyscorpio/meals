@@ -2,7 +2,7 @@
    页面本身走「网络优先」——打开一次就是最新的，只有断网才用上一次的兜底；
    图标、清单这些不常变的走「先给缓存、后台更新」。
    原来页面也走缓存优先，结果改完代码关掉重开还是旧的，得靠清缓存才能看到新版 */
-const CACHE = 'meals-v8';
+const CACHE = 'meals-v9';
 const ASSETS = ['./', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
