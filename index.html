@@ -423,7 +423,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 21:55';
+var BUILD = '2026-11-21 22:31';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2339,7 +2339,8 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false,
-           gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null };
+           gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null,
+           catOpen:null, gMove:null };
 (function(){
   var t = (location.hash || '').replace('#','');
   if(['today','fridge','lib','log'].indexOf(t) >= 0) ui.tab = t;
@@ -2963,6 +2964,9 @@ function viewLog(){
 
 function renderSheet(){
   var box = document.getElementById('sheetbox');
+  /* 展开一类、点中一样东西都会整块重绘。不记一下滚动位置，
+     点第 6 类会被弹回顶部，得重新往下滚一遍 */
+  var keepTop = box ? box.scrollTop : 0;
   var h = '';
   if(ui.sheetType === 'add') h = sheetAdd();
   else if(ui.sheetType === 'edit') h = sheetEdit();
@@ -2976,6 +2980,7 @@ function renderSheet(){
   else if(ui.sheetType === 'clash') h = sheetClash();
   else h = sheetSettings();
   box.innerHTML = h;
+  if(keepTop) box.scrollTop = keepTop;
   document.getElementById('sheet').classList.toggle('on', ui.sheet);
 }
 
@@ -3420,7 +3425,7 @@ function sheetEdit(){
        [isUserIng(id) ? '自己加的' : gOf(id), '保质 ' + shelfDays(id, x.name) + ' 天',
         sh.fresh ? '建议当天吃' : ''].filter(Boolean).join(' · ') + '</div>';
   h += '<div class="setrow"><span>分类</span><span style="font-size:13px;color:#5E5A50">' + esc(gOf(id)) +
-       ' <button class="ghost" data-act="gEdit">改</button></span></div>';
+       ' <button class="ghost" data-act="gEdit" style="color:#2F5D46;font-size:12.5px">改分类</button></span></div>';
   if(ui.gEdit){
     h += '<div class="chips wrap" style="padding:2px 0 6px">';
     groupsOf().forEach(function(g2){
@@ -3496,20 +3501,47 @@ function sheetCat(){
   var g = groupsOf();
   var h = '<h3>分类</h3>';
   h += '<div style="font-size:12px;color:#8A8478;line-height:1.7;margin:-8px 0 10px">' +
+       '点一类展开，点里面的食材就能换到别的类。<br>' +
        '分类只决定你逛冰箱时怎么分组，不影响推荐。删掉一类，里面的食材会挪到「其他」，不会丢。</div>';
   g.forEach(function(name){
-    var n = groupIds(name).length;
+    var ids = groupIds(name);
     if(ui.catEdit === name){
       h += '<div class="catrow"><input id="catName" type="text" value="' + esc(ui.catName == null ? name : ui.catName) + '">' +
            '<button data-act="catSave" data-g="' + esc(name) + '">存</button>' +
            '<button class="ghost" data-act="catCancel">取消</button></div>';
       return;
     }
-    h += '<div class="catrow"><div class="ib"><div class="nm">' + esc(name) + '</div>' +
-         '<div class="mt">' + n + ' 样食材</div></div>' +
+    var open = ui.catOpen === name;
+    /* 整行可点：展开这一类里的食材。原来只有「改名 / 删」，
+       结果是有库存的才能点开去改分类，没买过的那样东西永远改不了 */
+    h += '<div class="catrow" data-act="catOpen" data-g="' + esc(name) + '" style="cursor:pointer">' +
+         '<div class="ib"><div class="nm">' + esc(name) + (open ? ' ▾' : ' ›') + '</div>' +
+         '<div class="mt">' + ids.length + ' 样食材' + (ids.length && !open ? ' · 点开看 / 改' : '') + '</div></div>' +
          '<button class="ghost" data-act="catRename" data-g="' + esc(name) + '">改名</button>' +
          (g.length > 1 ? '<button class="ghost del" data-act="catDel" data-g="' + esc(name) + '">删</button>' : '') +
          '</div>';
+    if(!open) return;
+    if(!ids.length){
+      h += '<div class="empty" style="padding:6px 0 14px">这一类还空着。记一笔时选它，或者把别的类里的东西挪过来。</div>';
+      return;
+    }
+    h += '<div class="chips wrap" style="padding:8px 0 6px">';
+    ids.forEach(function(id){
+      h += '<button class="chip' + (ui.gMove === id ? ' on' : '') + '" data-act="gMoveOpen" data-id="' + id + '">' +
+           esc(ingName(id)) + '</button>';
+    });
+    h += '</div>';
+    /* 点中哪样，就在下面出「挪到哪一类」。只在这一类展开时才显示，
+       免得收起别的类时还挂着上一次选中的东西 */
+    if(ui.gMove && ids.indexOf(ui.gMove) >= 0){
+      h += '<div style="font-size:12px;color:#8A8478;margin:0 0 6px">把「' + esc(ingName(ui.gMove)) + '」挪到：</div>';
+      h += '<div class="chips wrap" style="padding-bottom:10px">';
+      g.forEach(function(g2){
+        h += '<button class="chip' + (gOf(ui.gMove) === g2 ? ' on' : '') + '" data-act="gMoveTo" data-id="' + ui.gMove +
+             '" data-g="' + esc(g2) + '">' + esc(g2) + '</button>';
+      });
+      h += '</div>';
+    }
   });
   h += '<div class="catrow"><input id="catNew" type="text" placeholder="新分类名，比如「冷冻」" value="' + esc(ui.catNew || '') + '">' +
        '<button data-act="catAdd">增加</button></div>';
@@ -3748,7 +3780,8 @@ document.addEventListener('click', function(e){
   else if(act === 'sheetCat'){
     /* 只有从「记一笔 / 保质期设置」里点进来才记「回哪儿」，冰箱页直接点的不留后路 */
     ui.catFrom = (ui.sheet && (ui.sheetType === 'add' || ui.sheetType === 'shelf')) ? ui.sheetType : null;
-    ui.sheet = true; ui.sheetType = 'cat'; ui.catEdit = null; ui.catNew = ''; renderSheet();
+    ui.sheet = true; ui.sheetType = 'cat'; ui.catEdit = null; ui.catNew = '';
+    ui.catOpen = null; ui.gMove = null; renderSheet();
   }
   else if(act === 'catBack'){
     ui.sheetType = (ui.catFrom === 'add' || ui.catFrom === 'shelf') ? ui.catFrom : 'settings';
@@ -3781,6 +3814,24 @@ document.addEventListener('click', function(e){
     var n = groupIds(delG).length;
     if(deleteGroup(delG)) toast('「' + delG + '」删了' + (n ? '，' + n + ' 样食材挪到「' + otherGroup() + '」' : ''));
     else toast('至少留一个分类');
+    renderSheet(); render();
+  }
+  else if(act === 'catOpen'){
+    var cg = el.dataset.g;
+    ui.catOpen = (ui.catOpen === cg) ? null : cg;
+    ui.gMove = null;                 /* 换一类就清掉上次选中的那样东西 */
+    renderSheet();
+  }
+  else if(act === 'gMoveOpen'){
+    ui.gMove = (ui.gMove === id) ? null : id;
+    renderSheet();
+  }
+  else if(act === 'gMoveTo'){
+    var to = el.dataset.g, mvName = ingName(id);
+    if(setIngGroup(id, to)){
+      ui.gMove = null;
+      toast('「' + mvName + '」挪到「' + to + '」了');
+    }
     renderSheet(); render();
   }
   else if(act === 'gEdit'){ ui.gEdit = !ui.gEdit; renderSheet(); }
@@ -3848,7 +3899,7 @@ document.addEventListener('click', function(e){
   else if(act === 'rsOpen'){ ui.sheet = true; ui.sheetType = 'restore'; ui.rsTxt = ''; ui.rsInfo = null; ui.rsParsed = null; renderSheet(); }
   else if(act === 'rsCheck'){ checkRestore(); }
   else if(act === 'rsApply'){ applyBackup(); }
-  else if(act === 'closesheet'){ ui.sheet = false; renderKeep(); }
+  else if(act === 'closesheet'){ ui.sheet = false; ui.catOpen = null; ui.gMove = null; renderKeep(); }
   else if(act === 'win'){ state.settings.window = Number(el.dataset.v); save(); reroll(); }
   else if(act === 'tg'){ var k = el.dataset.k; state.settings[k] = !state.settings[k]; save(); reroll(); }
   else if(act === 'reset'){
@@ -4239,6 +4290,26 @@ if(location.search.indexOf('test') >= 0){
   chk('内置食材也能改分类', (function(){
     setIngGroup('beef', '冷冻');
     return gOf('beef') === '冷冻' && groupIds('冷冻').length === 2;
+  })());
+  chk('分类页展开能看到该类有哪些食材', (function(){
+    ui.catOpen = '冷冻'; ui.gMove = null;
+    var s = sheetCat();
+    ui.catOpen = null;
+    return s.indexOf('▾') >= 0 && s.indexOf('速冻毛豆') >= 0 && s.indexOf('牛里脊') >= 0;
+  })());
+  chk('分类页点中一样东西，出「挪到哪类」', (function(){
+    ui.catOpen = '冷冻'; ui.gMove = kid;
+    var s = sheetCat();
+    ui.catOpen = null; ui.gMove = null;
+    return s.indexOf('挪到：') >= 0 && s.indexOf('data-act="gMoveTo"') >= 0 && s.indexOf('data-act="gMoveOpen"') >= 0;
+  })());
+  chk('没买过、没库存的东西也能改分类（不必先记一笔）', (function(){
+    var stocked = invAll('chickenBreast');
+    var before = gOf('chickenBreast');
+    var ok = !stocked && setIngGroup('chickenBreast', '冷冻') &&
+             gOf('chickenBreast') === '冷冻' && before !== '冷冻';
+    setIngGroup('chickenBreast', before);      /* 复原，别影响后面的断言 */
+    return ok;
   })());
   chk('分类改名，里面的食材跟着走', (function(){
     var ok = renameGroup('冷冻', '冻品');
