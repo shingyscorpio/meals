@@ -271,12 +271,37 @@
     line-height:1;font-family:inherit;cursor:pointer;padding:0}
   mark.hl{background:#F6ECCE;color:inherit;border-radius:3px;padding:0 1px}
 
-  /* 今日灵感 */
+  /* 今日灵感：菜谱页里的一条窄带，点开才是卡片 */
+  .recstrip{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+    border:1px solid #EAE4D6;background:#FBFAF5;border-radius:11px;padding:9px 11px;margin:0 0 12px;
+    font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .recstrip:active{background:#F6F3E9}
+  .recstrip .rstag{flex:0 0 auto;font-size:10.5px;line-height:1.6;color:#2F5D46;background:#E9F1EA;
+    border-radius:6px;padding:1px 6px}
+  .recstrip .rstxt{flex:1;min-width:0;font-size:12.5px;color:#8A8478;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .recstrip .rstxt b{color:#3B372F;font-weight:550}
+  .recstrip .rsmore{flex:0 0 auto;font-size:11.5px;color:#3C6B4F}
   .card.recs{background:#FBFAF5}
-  .recrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px dashed #F0ECE3}
-  .recrow:last-of-type{border-bottom:0}
+  .recitem{padding:9px 0;border-bottom:1px dashed #F0ECE3}
+  .recitem:last-of-type{border-bottom:0}
+  .recrow{display:flex;align-items:center;gap:9px}
   .recmain{flex:1;min-width:0}
-  .recmain .nm{font-size:14px;font-weight:560;line-height:1.35}
+  .recname{border:0;background:none;padding:0;font-family:inherit;font-size:14px;font-weight:560;
+    color:#3B372F;line-height:1.35;text-align:left;cursor:pointer}
+  .recname::after{content:' ›';color:#C3BCAD;font-weight:400;font-size:11px}
+  .recdet{margin:7px 0 1px;padding:8px 10px;background:#F7F4EB;border-radius:9px;
+    font-size:12px;color:#5E5A50;line-height:1.7}
+  .recdet .k{color:#9A9488;margin-right:5px}
+  .recdet .steps{white-space:pre-line;margin-top:1px}
+  /* 为什么推它 + 出处口碑：这两行是「选不选」的依据，不能藏进展开里 */
+  .recwhy{font-size:12px;color:#5E5A50;line-height:1.6;margin:5px 0 0}
+  .recsrc{font-size:11px;color:#9A9488;line-height:1.6;margin-top:3px}
+  .recsrc.muted{color:#B5AFA2}
+  .recsrc .recopen{color:#3C6B4F;text-decoration:none;margin-left:4px}
+  .recsay{font-size:11.5px;color:#8A8478;line-height:1.6;margin-top:3px}
+  .recfold{border:0;background:#F2EFE6;border-radius:7px;font-family:inherit;font-size:11px;
+    color:#6B665B;padding:2px 7px;margin-left:7px;cursor:pointer}
   .recmain .mt{font-size:11px;color:#9A9488;margin-top:2px;line-height:1.4}
   .recbtn{flex:0 0 auto;display:flex;align-items:center;gap:5px}
   .recbtn button{border:0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11.5px;
@@ -454,7 +479,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-26 18:10';
+var BUILD = '2026-11-26 18:46';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2377,7 +2402,7 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false,
            gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null,
-           catOpen:null, gMove:null, recsAll:false };
+           catOpen:null, gMove:null, recsAll:false, recsOpen:false, recInfo:'', recFull:'' };
 (function(){
   var t = (location.hash || '').replace('#','');
   if(['today','fridge','lib','log'].indexOf(t) >= 0) ui.tab = t;
@@ -2651,7 +2676,8 @@ function loadRecs(force){
       if(!d || !d.recs || !d.recs.length) return;
       state.recs = { at: d.at || now, list: d.recs };
       save();
-      if(ui.tab === 'today') renderKeep();
+      /* 在菜谱页就把那条窄带补上；正在搜东西就别打断人 */
+      if(ui.tab === 'lib' && !libQ()) renderKeep();
     })
     .catch(function(){});
 }
@@ -2728,14 +2754,65 @@ function recKeep(id){
   var d = recToDraft(rec);
   saveRecipe(d);
   state.recDone['r:' + id] = 1;
+  if(ui.recInfo === id){ ui.recInfo = ''; ui.recFull = ''; }
   save();
-  render();
+  /* 在菜谱页就地刷新，别整页重绘——正翻到一半的位置不能跳 */
+  if(ui.tab === 'lib') renderKeep(); else render();
   toast('「' + rec.n + '」收进菜谱了');
 }
 function recSkip(id){
   state.recDone['r:' + id] = 1;
-  save(); render();
+  if(ui.recInfo === id){ ui.recInfo = ''; ui.recFull = ''; }
+  save();
+  if(ui.tab === 'lib') renderKeep(); else render();
   toast('这条不再出现');
+}
+
+/* 菜谱页里默认只占一行的那条窄带：不点开也看得出今天有什么 */
+function recStripHtml(){
+  var all = recAll();
+  if(!all.length) return '';
+  var txt = all.length > 1
+    ? '今日 ' + all.length + ' 道 · <b>' + esc(all[0].n) + '</b>'
+    : '<b>' + esc(all[0].n) + '</b>';
+  return '<button class="recstrip" data-act="recsOpen">' +
+         '<span class="rstag">灵感</span>' +
+         '<span class="rstxt">' + txt + '</span>' +
+         '<span class="rsmore">看看 ›</span></button>';
+}
+/* 展开还是收起，只看 ui.recsOpen——刷新页面就回到收起，不长期占地方 */
+function viewRecsBlock(){
+  if(!recAll().length) return '';
+  return ui.recsOpen ? viewRecsHtml() : recStripHtml();
+}
+function refreshRecs(){
+  var box = document.getElementById('recZone');
+  if(box) box.innerHTML = viewRecsBlock();
+}
+
+/* 「为什么今天推它」和「出处口碑」：这两行决定点不点「试一试」，
+   所以放在收起状态也看得见，不藏进展开里 */
+function recWhyHtml(r){
+  var h = '';
+  if(r.why) h += '<div class="recwhy">' + esc(r.why) + '</div>';
+  var f = (r.ref && typeof r.ref === 'object') ? r.ref : null;
+  if(!f || !(f.plat || f.url)){
+    return h + '<div class="recsrc muted">家常做法 · 没有单一出处</div>';
+  }
+  var bits = [];
+  var same = (f.match === 'exact');
+  if(f.plat) bits.push(String(f.plat));
+  if(f.score) bits.push(String(f.score) + ' 分');
+  if(f.made) bits.push(String(f.made) + ' 人做过');
+  /* 平台菜名跟我们不完全一样时写「参考」，别让人以为点开就是这一版 */
+  var line = esc((same ? '' : '参考 ') + bits.join(' · '));
+  var u = safeUrl(f.url);
+  if(u) line += '<a class="recopen" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' +
+                '· ' + (same ? '看原菜谱 ›' : '看同类做法 ›') + '</a>';
+  h += '<div class="recsrc">' + line + '</div>';
+  /* 一句真实评价比一个分数更能说明「大家觉得怎么样」 */
+  if(f.say) h += '<div class="recsay">“' + esc(f.say) + '”' + (f.author ? '　—— ' + esc(f.author) : '') + '</div>';
+  return h;
 }
 
 function viewRecsHtml(){
@@ -2744,20 +2821,46 @@ function viewRecsHtml(){
   var got = ui.recsAll ? all : all.slice(0, REC_KEEP);
   var at = (state.recs && state.recs.at) ? String(state.recs.at).slice(5).replace('-', '/') + ' 更新' : '';
   var h = '<div class="card recs"><div class="card-h"><b>今日灵感</b><span>' +
-          (at ? at + ' · ' : '') + all.length + ' 道</span></div>';
-  h += '<div class="hint" style="margin:-4px 0 4px">每天 6:30 加一道 · 试一试只进今天，收进菜谱才落库</div>';
+          (at ? at + ' · ' : '') + all.length + ' 道' +
+          '<button class="recfold" data-act="recsClose">收起</button></span></div>';
+  h += '<div class="hint" style="margin:-4px 0 4px">每天 6:30 加一道 · 点菜名看做法 · 试一试只进今天</div>';
   got.forEach(function(r){
     /* 「新灵感」这条对每道都成立，摆在每一行上等于没说 */
     var tags = (r.tags || []).filter(function(t){ return t && t !== '新灵感'; }).slice(0, 2);
     var meta = [(r.cook ? r.cook + '′' : ''), r.method, r.cuisine, tags.join('/')].filter(Boolean).join(' · ');
-    h += '<div class="recrow"><div class="recmain">' +
-         '<div class="nm">' + esc(r.n) + '</div>' +
+    var open = ui.recInfo === r.id;
+    var full = ui.recFull === r.id;
+    var needs = (r.needs || []).join('、');
+    var prep = r.prep || [];
+    var allSteps = r.steps || [];
+    /* 默认只给前两步：全套铺开会把下面的菜谱列表推出去一屏多，
+       真想照着做再点「看完整做法」 */
+    var steps = (full ? allSteps : allSteps.slice(0, 2))
+                .map(function(x, i){ return (i + 1) + '. ' + x; }).join('\n');
+    h += '<div class="recitem"><div class="recrow"><div class="recmain">' +
+         '<button class="recname" data-act="recInfo" data-id="' + esc(r.id) + '">' + esc(r.n) + '</button>' +
          '<div class="mt">' + esc(meta) + '</div></div>' +
          '<div class="recbtn">' +
          '<button data-act="recTry" data-id="' + esc(r.id) + '">试一试</button>' +
          '<button data-act="recKeep" data-id="' + esc(r.id) + '">收进菜谱</button>' +
          '<button class="recx" data-act="recSkip" data-id="' + esc(r.id) + '" title="不看了">✕</button>' +
-         '</div></div>';
+         '</div></div>' + recWhyHtml(r);
+    if(open){
+      h += '<div class="recdet">' +
+           (needs ? '<div><span class="k">用料</span>' + esc(needs) + '</div>' : '') +
+           (prep.length
+             ? (full ? '<div><span class="k">提前</span>' + esc(prep.join('；')) + '</div>'
+                     : '<div><span class="k">提前</span>前一晚要先做 ' + prep.length + ' 件事</div>')
+             : '') +
+           (steps ? '<div class="steps"><span class="k">做法</span>\n' + esc(steps) + '</div>' : '') +
+           (!needs && !prep.length && !allSteps.length ? '<div>这道只有名字，还没拿到用料和做法。</div>' : '') +
+           (allSteps.length > 2 || (full && prep.length > 1)
+             ? '<button class="morebtn" data-act="recFull" data-id="' + esc(r.id) + '">' +
+               (full ? '收起点' : '看完整做法（' + allSteps.length + ' 步）') + '</button>'
+             : '') +
+           '</div>';
+    }
+    h += '</div>';
   });
   if(all.length > REC_KEEP){
     h += '<button class="morebtn" data-act="recMore">' + (ui.recsAll ? '收起点' : '看全部 ' + all.length + ' 道') + '</button>';
@@ -2799,8 +2902,8 @@ function viewToday(){
     h += '<div class="banner">已记入历史，库存也扣掉了。<button data-act="undoEat">改主意</button></div>';
   }
 
-  /* 每日灵感：有新东西就先让人看一眼，但排在今天这顿之前不抢戏 */
-  h += viewRecsHtml();
+  /* 今日灵感不在这里——首页第一眼该看到的是今天吃什么。
+     灵感挪到菜谱页，见 viewLib() 里那条窄带 */
 
   h += '<div class="card">';
   h += '<div class="card-h"><span>今天给你排好了</span><b>' + ev.hand + '′ 动手</b></div>';
@@ -3070,6 +3173,12 @@ function viewLib(){
        '<button class="btn btn-primary" data-act="rNew" style="font-size:14px">＋ 加一道菜</button>' +
        (pendN ? '<button class="btn btn-ghost" data-act="rPending" style="font-size:14px">待补录 ' + pendN + ' 道</button>' : '') +
        '</div>';
+  /* 灵感：搜索和加菜下面、分类筛选上面的一条窄带。
+     正在搜东西、或者正在给今天加菜时不出现——那两种时候别塞新菜进来 */
+  if(!q && !ui.addMode){
+    var rb = viewRecsBlock();
+    if(rb) h += '<div id="recZone">' + rb + '</div>';
+  }
   h += '<div class="chips">';
   cats.forEach(function(c){
     h += '<button class="chip' + (ui.libCat === c.k ? ' on' : '') + '" data-act="libcat" data-cat="' + c.k + '">' + c.n +
@@ -3912,7 +4021,15 @@ document.addEventListener('click', function(e){
   else if(act === 'recTry'){ recTry(id); }
   else if(act === 'recKeep'){ recKeep(id); }
   else if(act === 'recSkip'){ recSkip(id); }
-  else if(act === 'recMore'){ ui.recsAll = !ui.recsAll; render(); }
+  else if(act === 'recMore'){ ui.recsAll = !ui.recsAll; refreshRecs(); }
+  else if(act === 'recsOpen'){ ui.recsOpen = true; refreshRecs(); }
+  else if(act === 'recsClose'){ ui.recsOpen = false; ui.recInfo = ''; ui.recFull = ''; refreshRecs(); }
+  else if(act === 'recInfo'){
+    ui.recInfo = (ui.recInfo === id ? '' : id);
+    ui.recFull = '';
+    refreshRecs();
+  }
+  else if(act === 'recFull'){ ui.recFull = (ui.recFull === id ? '' : id); refreshRecs(); }
   else if(act === 'addslot'){ ui.tab = 'lib'; ui.libCat = el.dataset.cat; ui.libQ = ''; render(); }
 
   /* 菜谱 */
@@ -5504,6 +5621,101 @@ if(location.search.indexOf('test') >= 0){
   chk('灵感：收进来的菜带 my 标记，装包不会冲掉', (function(){
     var hit = state.recipes.filter(function(x){ return String(x.key || '').indexOf('rc:') === 0; })[0];
     return !!hit && hit.my === 1;
+  })());
+
+  /* ---------- 灵感挪到菜谱页：先是一条窄带，点开才是卡片 ---------- */
+  chk('灵感：不在首页，今天页第一眼还是今天这顿', (function(){
+    state.recs = { at: todayStr(), list: [
+      { id:'n18', n:'红薯燕麦软糕淋酸奶', cook:12, method:'蒸', cuisine:'中式',
+        needs:['红薯','燕麦片','鸡蛋'], prep:['前一晚把红薯蒸熟压泥'], steps:['打蛋拌匀','上锅蒸 10 分钟','淋酸奶'],
+        why:'无油无糖的甜口，前一晚拌好冷藏，早上只管蒸',
+        ref:{ plat:'下厨房', title:'燕麦酸奶红薯糕', author:'啊呜辅食',
+              url:'https://www.xiachufang.com/recipe/106436320/', score:'8.4', made:'2833',
+              say:'绵密不甜腻，孩子也爱吃', match:'similar' },
+        tags:['新灵感'] },
+      { id:'n17', n:'葱香芝士蛋煎馒头片', cook:8, method:'煎', cuisine:'中式',
+        needs:['馒头','鸡蛋','芝士片'], prep:[], steps:['馒头切片','裹蛋液煎'], tags:['快手'] }
+    ]};
+    state.recDone = {}; ui.recsOpen = false;
+    state.settings.window = 60; ensurePick(); state.settings.window = 15;
+    ui.tab = 'today';
+    var h = viewToday();
+    return h.indexOf('今日灵感') < 0 && h.indexOf('data-act="recsOpen"') < 0 &&
+           h.indexOf('今天给你排好了') >= 0;
+  })());
+  chk('灵感：菜谱页里默认只占一条窄带，不铺开', (function(){
+    ui.tab = 'lib'; ui.libCat = 'all'; ui.libQ = ''; ui.addMode = false;
+    ui.recsOpen = false; ui.recInfo = '';
+    var h = viewLib();
+    return h.indexOf('id="recZone"') >= 0 && h.indexOf('class="recstrip"') >= 0 &&
+           h.indexOf('data-act="recsOpen"') >= 0 && h.indexOf('今日 2 道') >= 0 &&
+           h.indexOf('data-act="recKeep"') < 0;
+  })());
+  chk('灵感：搜索时不插进来', (function(){
+    ui.libQ = '蛋';
+    var h = viewLib();
+    ui.libQ = '';
+    return h.indexOf('recZone') < 0;
+  })());
+  chk('灵感：给今天加菜时也不插进来', (function(){
+    ui.addMode = true;
+    var h = viewLib();
+    ui.addMode = false;
+    return h.indexOf('recZone') < 0;
+  })());
+  chk('灵感：点开窄带才铺成卡片，菜名能看用料和做法', (function(){
+    ui.addMode = false; ui.libQ = ''; ui.recsOpen = true;
+    var h = viewLib();
+    var ok = h.indexOf('data-act="recKeep"') >= 0 && h.indexOf('data-act="recTry"') >= 0 &&
+             h.indexOf('class="recstrip"') < 0;
+    ui.recInfo = state.recs.list[0].id;
+    var h2 = viewLib();
+    var det = h2.indexOf('用料') >= 0 &&
+              h2.indexOf('前一晚把红薯蒸熟压泥') >= 0 && h2.indexOf('1. 打蛋拌匀') >= 0;
+    ui.recInfo = '';
+    return ok && det;
+  })());
+  chk('灵感：做法默认只给两步，想看全再点开', (function(){
+    ui.recsOpen = true; ui.recInfo = state.recs.list[0].id; ui.recFull = '';
+    var h = viewLib();
+    var twoStep = h.indexOf('2. 上锅蒸 10 分钟') >= 0 && h.indexOf('3. 淋酸奶') < 0 &&
+                  h.indexOf('看完整做法（3 步）') >= 0;
+    ui.recFull = state.recs.list[0].id;
+    var h2 = viewLib();
+    var full = h2.indexOf('3. 淋酸奶') >= 0 && h2.indexOf('看完整做法') < 0;
+    ui.recFull = ''; ui.recInfo = '';
+    return twoStep && full;
+  })());
+  /* ---------- 灵感要说清「为什么推、哪来的、别人怎么评」 ---------- */
+  chk('灵感：收起状态下也看得见推荐理由和口碑', (function(){
+    ui.recsOpen = true; ui.recInfo = ''; ui.recFull = '';
+    var h = viewLib();
+    return h.indexOf('无油无糖的甜口') >= 0 && h.indexOf('下厨房') >= 0 &&
+           h.indexOf('8.4 分') >= 0 && h.indexOf('2833 人做过') >= 0 &&
+           h.indexOf('参考 下厨房') >= 0 && h.indexOf('class="recopen"') >= 0 &&
+           h.indexOf('看同类做法') >= 0;
+  })());
+  chk('灵感：没有出处的菜如实说，不冒充有来源', (function(){
+    var h = viewLib();
+    return h.indexOf('家常做法 · 没有单一出处') >= 0;
+  })());
+  chk('灵感：真实评价和作者不点开也看得到', (function(){
+    ui.recInfo = '';
+    var h = viewLib();
+    return h.indexOf('“绵密不甜腻，孩子也爱吃”') >= 0 && h.indexOf('—— 啊呜辅食') >= 0;
+  })());
+  chk('灵感：出处链接只认 http(s)，js 伪协议不渲染成链接', (function(){
+    var old = state.recs.list[0].ref.url;
+    state.recs.list[0].ref.url = 'javascript:alert(1)';
+    var h = viewLib();
+    state.recs.list[0].ref.url = old;
+    return h.indexOf('javascript:') < 0;
+  })());
+  chk('灵感：收起后回到一条窄带，且整页还有菜谱列表', (function(){
+    ui.recsOpen = false;
+    var h = viewLib();
+    return h.indexOf('class="recstrip"') >= 0 && h.indexOf('id="libList"') >= 0 &&
+           h.indexOf('data-act="recKeep"') < 0;
   })());
 
   chk('编辑器：只有菜名要打字，判断收成一行字', (function(){
