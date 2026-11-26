@@ -10,6 +10,17 @@
    "method": "蒸",
    "cook": 12,
    "prepMin": 10,
+   "why": "无油无糖的甜口，前一晚拌好冷藏，早上只管蒸；酸奶淋面比蛋糕清爽，还带一份益生菌。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "燕麦酸奶红薯糕，无需打发不用烤箱，口感绵密",
+    "author": "啊呜辅食",
+    "url": "https://www.xiachufang.com/recipe/106436320",
+    "score": null,
+    "made": null,
+    "say": "无需打发不用烤箱，口感绵密",
+    "match": "similar"
+   },
    "needs": [
     "红薯",
     "燕麦片",
@@ -44,6 +55,17 @@
    "method": "煎",
    "cook": 8,
    "prepMin": 4,
+   "why": "吃不完的馒头切片裹蛋液煎，外脆里软，盖片芝士就是中式汉堡，8 分钟。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "煎馒头片",
+    "author": null,
+    "url": "https://www.xiachufang.com/recipe/36658/",
+    "score": "7.8",
+    "made": "881",
+    "say": null,
+    "match": "similar"
+   },
    "needs": [
     "杂粮馒头",
     "鸡蛋",
@@ -76,6 +98,17 @@
    "method": "烤",
    "cook": 9,
    "prepMin": 4,
+   "why": "贝果切开当披萨底，不用揉面；烤 9 分钟，能拿着走的披萨，比点外卖快。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "贝果披萨",
+    "author": null,
+    "url": "https://www.xiachufang.com/recipe/106721130",
+    "score": null,
+    "made": null,
+    "say": "贝果披萨，很好吃，推荐！",
+    "match": "similar"
+   },
    "needs": [
     "全麦贝果",
     "芝士片",
@@ -107,6 +140,17 @@
    "method": "煮",
    "cook": 11,
    "prepMin": 6,
+   "why": "隔夜饭最好的归宿：滑蛋裹着鸡肉连汁盖在饭上，一碗就够，不用另外做菜。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "日本盖浇饭始祖亲子丼",
+    "author": null,
+    "url": "https://www.xiachufang.com/category/1030353",
+    "score": "8.3",
+    "made": "317",
+    "say": null,
+    "match": "similar"
+   },
    "needs": [
     "米饭（隔夜）",
     "鸡胸肉",
@@ -140,6 +184,17 @@
    "method": "煎",
    "cook": 12,
    "prepMin": 5,
+   "why": "一口锅、蛋不用打散，番茄酱汁咕嘟着把蛋焖熟，吐司蘸着吃；周末早上值得这个仪式感。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "【终极烹饪课程】北非蛋",
+    "author": "阿May又改名儿了",
+    "url": "https://www.xiachufang.com/category/1024795",
+    "score": "8.4",
+    "made": "2833",
+    "say": null,
+    "match": "similar"
+   },
    "needs": [
     "全麦吐司",
     "鸡蛋",
@@ -171,6 +226,17 @@
    "method": "烤",
    "cook": 11,
    "prepMin": 8,
+   "why": "像吃蛋糕，其实是燕麦做的；苹果加肉桂是秋天的味道，前一晚拌好早上直接烤。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "早餐烤燕麦 Baked Oatmeal",
+    "author": "ReneeChannnn",
+    "url": "https://www.xiachufang.com/recipe/100253401",
+    "score": "7.5",
+    "made": "2940",
+    "say": "让你爱上燕麦的吃法",
+    "match": "similar"
+   },
    "needs": [
     "燕麦片",
     "鸡蛋",
@@ -201,6 +267,17 @@
    "method": "煎",
    "cook": 9,
    "prepMin": 2,
+   "why": "把蔬菜藏进蛋卷里，不爱吃菜的人也能吃下去；芝士一拉丝，孩子不挑。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "双色玉子烧（菠菜鸡蛋卷）",
+    "author": "纯圆皇后本尊",
+    "url": "https://www.xiachufang.com/recipe/106693834/",
+    "score": "8.7",
+    "made": "59",
+    "say": "热吃冷吃都完全不腥气",
+    "match": "similar"
+   },
    "needs": [
     "鸡蛋",
     "西兰花",
@@ -228,6 +305,17 @@
    "method": "烤",
    "cook": 3,
    "prepMin": 0,
+   "why": "3 分钟能做完的早餐里最扛饿的一个：花生酱的脂肪加苹果的纤维，顶到中午不饿。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "简易吐司苹果",
+    "author": null,
+    "url": "https://m.xiachufang.com/recipe/106025591",
+    "score": null,
+    "made": null,
+    "say": "超级无敌简单",
+    "match": "exact"
+   },
    "needs": [
     "全麦吐司",
     "花生酱",
@@ -253,6 +341,17 @@
    "method": "微波",
    "cook": 6,
    "prepMin": 0,
+   "why": "只用微波炉、只洗一个碗，6 分钟出一份滑蛋，赶时间的早上首选。",
+   "ref": {
+    "plat": "美食天下",
+    "title": "多色蒸蛋（快手早餐）",
+    "author": null,
+    "url": "https://m.meishichina.com/recipesgshow/522730/",
+    "score": null,
+    "made": null,
+    "say": "营养丰富，颜色诱人",
+    "match": "exact"
+   },
    "needs": [
     "鸡蛋",
     "冷冻蔬菜粒",
@@ -278,6 +377,17 @@
    "method": "煮",
    "cook": 10,
    "prepMin": 8,
+   "why": "胃不舒服、想吃清淡的那天就做它；隔夜饭捏成饭团一起下汤，一点不浪费。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "豆腐蘑菇汤（有鸡蛋哦）",
+    "author": "W小厨房YK",
+    "url": "https://mip.xiachufang.com/recipe/104644729",
+    "score": "8.8",
+    "made": "67",
+    "say": "味道有丢丢像味增汤啦",
+    "match": "similar"
+   },
    "needs": [
     "米饭（隔夜）",
     "嫩豆腐",
@@ -306,6 +416,17 @@
    "method": "免煮",
    "cook": 5,
    "prepMin": 12,
+   "why": "前一晚装进罐子，早上拎走就行；藜麦顶饱、鸡胸管蛋白，通勤路上也能吃。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "藜麦鸡胸沙拉",
+    "author": "白族段妈妈",
+    "url": "https://www.xiachufang.com/recipe/102296788/",
+    "score": "8.0",
+    "made": "232",
+    "say": "沙拉少油少盐，鸡胸低脂高蛋白",
+    "match": "similar"
+   },
    "needs": [
     "藜麦",
     "鸡胸肉",
@@ -335,6 +456,17 @@
    "method": "煎",
    "cook": 8,
    "prepMin": 0,
+   "why": "烟熏三文鱼不用处理直接下锅，8 分钟连锅端，omega-3 和蛋白一次到位。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "烟熏三文鱼菠菜蛋卷",
+    "author": "细嗅蔷薇natalie",
+    "url": "https://www.xiachufang.com/recipe/100471049/",
+    "score": "8.0",
+    "made": "435",
+    "say": "这一份富含蔬菜和蛋白质的早餐",
+    "match": "similar"
+   },
    "needs": [
     "烟熏三文鱼",
     "鸡蛋",
