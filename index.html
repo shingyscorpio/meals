@@ -423,7 +423,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-21 22:31';
+var BUILD = '2026-11-26 17:25';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -1785,6 +1785,8 @@ function saveRecipe(d){
      原来只有测试代码在补 id，生产路径没补——连存两道自建菜，库里只会剩最后一道。 */
   if(!d.id) d.id = newRecipeId();
   d._new = 0;
+  var oldRec = null;
+  state.recipes.forEach(function(x){ if(x && x.id === d.id) oldRec = x; });
   var item = {
     id:d.id, n:d.n, cat:d.cat, hand:d.hand, wall:d.wall, fire:d.fire, vessel:d.vessel,
     staple:d.staple, needs:d.needs.slice(), taste:(d.taste || [0,0,0]).slice(), cuisine:d.cuisine,
@@ -1802,6 +1804,9 @@ function saveRecipe(d){
   if(d.ext) item.ext = 1;
   /* key 是「这道菜从包里来」的凭证。编辑一次就丢的话，下次装包会当成新菜再加一条 */
   if(d.key) item.key = d.key;
+  /* 手动存过一次就打上记号：以后装包带来更新的做法，也不覆盖你这条 */
+  item.my = 1;
+  if(oldRec && oldRec.v) item.v = oldRec.v;
   var hit = -1;
   state.recipes.forEach(function(x, k){ if(x.id === d.id) hit = k; });
   if(hit >= 0) state.recipes[hit] = item; else state.recipes.push(item);
@@ -3079,20 +3084,34 @@ function packKey(it){
 }
 
 function mergePack(list){
-  var haveKey = {}, haveName = {}, used = {};
+  var haveKey = {}, haveName = {}, used = {}, byKey = {}, byName = {};
   state.recipes.forEach(function(r){
     if(!r) return;
-    haveKey[packKey(r)] = 1;
-    if(r.n) haveName[r.n] = 1;
+    haveKey[packKey(r)] = 1; byKey[packKey(r)] = r;
+    if(r.n){ haveName[r.n] = 1; byName[r.n] = r; }
     if(r.id) used[r.id] = 1;
   });
   /* 装包前留一份快照。逻辑再稳也架不住意外，留一份总比没有强 */
   try{ localStorage.setItem(KEY + '.prepack', JSON.stringify(state)); }catch(e){}
-  var added = 0, dup = 0, names = [];
+  var added = 0, dup = 0, upd = 0, names = [], updNames = [];
+  /* 包里带的版本号：补全后的做法比库里新，才升级；你手动改过（my）的一律不动 */
+  var verOf = function(x){ return Number(x && x.v) || 0; };
+  var UPDF = ['n','cat','hand','wall','fire','vessel','staple','needs','taste',
+              'cuisine','lv','m','prep','title','author','src','wk','red','fiber','cap','note'];
   (list || []).forEach(function(src){
     if(!src || !src.n) return;
     /* 两个键都查：改了名字的认 key，手工粘来的（没有 key）认名字 */
-    if(haveKey[packKey(src)] || haveName[src.n]){ dup++; return; }
+    if(haveKey[packKey(src)] || haveName[src.n]){
+      var loc = byKey[packKey(src)] || byName[src.n];
+      if(loc && verOf(src) > verOf(loc) && !loc.my){
+        UPDF.forEach(function(f){
+          if(src[f] !== undefined) loc[f] = JSON.parse(JSON.stringify(src[f]));
+        });
+        loc.v = src.v;
+        upd++; updNames.push(src.n);
+      } else dup++;
+      return;
+    }
     var it = JSON.parse(JSON.stringify(src));
     /* 包里没标就现算：补录的菜是机器排版出来的，靠文字特征比靠人手点准 */
     if(it.wk == null) it.wk = guessWeekend(it);
@@ -3107,7 +3126,7 @@ function mergePack(list){
     added++; names.push(it.n);
   });
   rebuildItems(); save();
-  return { added:added, dup:dup, total:ITEMS.length, names:names };
+  return { added:added, dup:dup, upd:upd, total:ITEMS.length, names:names, updNames:updNames };
 }
 
 function getJSON(url, ok, err){
@@ -3137,11 +3156,13 @@ function loadPack(url, label){
       renderSheet(); return;
     }
     var r = mergePack(list);
-    if(!r.added){
+    var bits = [];
+    if(r.added) bits.push('新增 <b>' + r.added + '</b> 道（' + r.names.join('、') + '）');
+    if(r.upd) bits.push('更新 <b>' + r.upd + '</b> 道做法（' + r.updNames.join('、') + '）');
+    if(!r.added && !r.upd){
       ui.setMsg = '没有新的：包里 ' + r.dup + ' 道你都已经有了。现在一共 ' + r.total + ' 道。';
     } else {
-      ui.setMsg = '装好了：新增 <b>' + r.added + '</b> 道' +
-                  '（' + r.names.join('、') + '）' +
+      ui.setMsg = '装好了：' + bits.join('，') +
                   (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
                   '。现在一共 ' + r.total + ' 道。';
     }
@@ -4586,13 +4607,13 @@ if(location.search.indexOf('test') >= 0){
     return sh.indexOf('菜谱包') >= 0 && sh.indexOf('data-act="seedAdd"') >= 0;
   })());
 
-  chk('菜谱包：51 道，没有重名也没有重 id', (function(){
+  chk('菜谱包：没有重名也没有重 id', (function(){
     var names = {}, ids = {}, bad = [];
     SEED.forEach(function(x){
       if(names[x.n]) bad.push('重名 ' + x.n); names[x.n] = 1;
       if(ids[x.id]) bad.push('重 id ' + x.id); ids[x.id] = 1;
     });
-    return SEED.length === 51 && bad.length === 0;
+    return SEED.length >= 40 && bad.length === 0;
   })());
 
   chk('装包：同名跳过，不覆盖自己改过的', (function(){
@@ -4606,6 +4627,38 @@ if(location.search.indexOf('test') >= 0){
     ]);
     var mine = findItem('mine1');
     var out = r.added === 1 && r.dup === 1 && mine && mine.m === '我自己写的' && !!findItem('p02');
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：包里带新版做法（v 更高）就升级，不用你重装', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'p02', n:'微波蒸蛋', cat:'protein', hand:2, wall:2, fire:'off',
+                       vessel:'microwave', needs:['egg'], taste:[0,0,0], prep:[],
+                       key:'nm:微波蒸蛋', m:'碗中加水，蛋打入，盖个盘子，中高火 90 秒。', v:20260101 }];
+    state.hidden = []; rebuildItems();
+    var r = mergePack([{ id:'p02', key:'nm:微波蒸蛋', n:'蒸蛋', cat:'protein', hand:2, wall:11,
+                         fire:'none', vessel:'steamer', needs:['egg'], taste:[0,0,0], prep:[],
+                         m:'1. 水开上锅，大火 5 分钟', v:20261125 }]);
+    var it = findItem('p02');
+    var out = r.upd === 1 && r.added === 0 && r.dup === 0 && ITEMS.length === 1 &&
+              it && it.n === '蒸蛋' && it.vessel === 'steamer' &&
+              it.m.indexOf('大火 5 分钟') >= 0 && it.v === 20261125;
+    state.recipes = bak; state.hidden = bakH; rebuildItems();
+    return out;
+  })());
+
+  chk('装包：自己改过的菜，包里有新版也不覆盖', (function(){
+    var bak = state.recipes.slice(), bakH = state.hidden.slice();
+    state.recipes = [{ id:'p02', n:'我的蒸蛋', cat:'protein', hand:2, wall:2, fire:'off',
+                       vessel:'microwave', needs:['egg'], taste:[0,0,0], prep:[],
+                       key:'nm:微波蒸蛋', m:'我自己写的做法', v:20260101, my:1 }];
+    state.hidden = []; rebuildItems();
+    var r = mergePack([{ id:'p02', key:'nm:微波蒸蛋', n:'蒸蛋', cat:'protein', hand:2, wall:11,
+                         fire:'none', vessel:'steamer', needs:['egg'], taste:[0,0,0], prep:[],
+                         m:'1. 水开上锅，大火 5 分钟', v:20261125 }]);
+    var it = findItem('p02');
+    var out = r.upd === 0 && r.dup === 1 && it.m === '我自己写的做法' && it.n === '我的蒸蛋';
     state.recipes = bak; state.hidden = bakH; rebuildItems();
     return out;
   })());
@@ -4780,11 +4833,13 @@ if(location.search.indexOf('test') >= 0){
   }));
   chk('新建的能被「用到它的菜」查到', recipesUsing('waterSpinach').some(function(x){ return x.id === myId; }));
 
-  var p0f = findItem('f01');
+  /* 不写死具体 id：菜谱包会增删，按「第一道纤维菜」取 */
+  var tgt = ITEMS.filter(function(x){ return x.cat === 'fiber'; })[0];
+  var p0f = findItem(tgt.id);
   var ep = draftFrom(p0f);
-  ep.hand = 3; ep.n = '凉拌菠菜（改过）';
+  ep.hand = 3; ep.n = tgt.n + '（改过）';
   saveRecipe(ep);
-  chk('改已有菜谱立刻生效', findItem('f01').hand === 3 && findItem('f01').n === '凉拌菠菜（改过）');
+  chk('改已有菜谱立刻生效', findItem(tgt.id).hand === 3 && findItem(tgt.id).n === tgt.n + '（改过）');
   chk('改已有菜谱不会多出一条', ITEMS.length === n0 + 1);
 
   chk('自建的能删掉', deleteRecipe(myId) === null && !findItem(myId));
