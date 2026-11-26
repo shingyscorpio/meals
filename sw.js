@@ -2,7 +2,7 @@
    页面本身走「网络优先」——打开一次就是最新的，只有断网才用上一次的兜底；
    图标、清单这些不常变的走「先给缓存、后台更新」。
    原来页面也走缓存优先，结果改完代码关掉重开还是旧的，得靠清缓存才能看到新版 */
-const CACHE = 'meals-v18';
+const CACHE = 'meals-v19';
 const ASSETS = ['./', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -46,6 +46,25 @@ self.addEventListener('fetch', function (e) {
           if (hit) return hit;
           return new Response('断网了，而且这台设备上还没存过页面。连上网打开一次就好。',
             { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+        });
+      })
+    );
+    return;
+  }
+
+  /* 每日灵感清单：必须每次问网络。走下面那条「先给缓存」的话，
+     会一直显示昨天那道，早上看到的就是过期货 */
+  if (/\/recs\.json$/.test(url.pathname)) {
+    e.respondWith(
+      fetch(req).then(function (r) {
+        if (r && r.ok) {
+          const cp = r.clone();
+          caches.open(CACHE).then(function (c) { c.put('./recs.json', cp); }).catch(function () {});
+        }
+        return r;
+      }).catch(function () {
+        return caches.match('./recs.json', { ignoreSearch: true }).then(function (h) {
+          return h || new Response('{"recs":[]}', { headers: { 'Content-Type': 'application/json' } });
         });
       })
     );
