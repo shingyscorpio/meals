@@ -391,7 +391,7 @@ var ING = {
   chia:'奇亚籽', cilantro:'香菜', passionFruit:'百香果', wonton:'小馄饨',
   pancake:'手抓饼',
   cabbage:'包菜', yuChoy:'油菜', eggplant:'茄子', enoki:'金针菇', nori:'海苔', shiitakeFresh:'香菇',
-  porkBelly:'五花肉', bacon:'培根'
+  porkBelly:'五花肉', bacon:'培根', pasta:'意面'
 };
 
 /* ============================================================
@@ -479,7 +479,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-26 18:46';
+var BUILD = '2026-11-26 21:10';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -595,7 +595,8 @@ var SEASON_WORDS = ['盐','糖','白糖','冰糖','油','食用油','花生油',
   '味精','鸡精','十三香','孜然','五香粉','八角','桂皮','香叶','蒜','大蒜','蒜末','蒜瓣','姜','姜末',
   '姜丝','姜片','姜蒜','葱','小葱','大葱','葱花','清水','水','高汤','柠檬汁','蜂蜜','辣椒油','花椒油',
   '腐乳','豆豉','咖喱','咖喱块','咖喱粉','辣椒','小米辣','干辣椒段','泡椒','剁椒','蒜蓉','水淀粉',
-  '葱白','葱蒜','蒜片','姜蒜','蒜头','味极鲜','蒸鱼豉油','美极鲜','植物油','玉米油','菜籽油','橄榄油','大豆油'];
+  '葱白','葱蒜','蒜片','姜蒜','蒜头','味极鲜','蒸鱼豉油','美极鲜','植物油','玉米油','菜籽油','橄榄油','大豆油',
+  '番茄红绘调料','番茄膏','番茄泥','黄油','芝士','芝士片','奶酪','马苏里拉'];
 
 var ING_ALIAS = {
   '西红柿':'tomato','番茄':'tomato','鸡蛋':'egg','土鸡蛋':'egg','蛋':'egg','鸡蛋液':'egg',
@@ -618,7 +619,8 @@ var ING_ALIAS = {
   '五花肉':'porkBelly','五花':'porkBelly','带皮五花':'porkBelly','培根':'bacon',
   '青红椒':'greenPepper','红椒':'greenPepper','菜椒':'greenPepper',
   '百香果':'passionFruit','燕麦':'oats','燕麦片':'oats','牛奶':'milk','全麦面包':'bread','面包':'bread',
-  '馒头':'mantou','馄饨':'wonton','手抓饼':'pancake','鹰嘴豆':'chickpea','坚果':'nuts','奇亚籽':'chia'
+  '馒头':'mantou','馄饨':'wonton','手抓饼':'pancake','鹰嘴豆':'chickpea','坚果':'nuts','奇亚籽':'chia',
+  '意面':'pasta','意大利面':'pasta','意大利面条':'pasta','直身面':'pasta','spaghetti':'pasta','通心粉':'pasta'
 };
 
 function isSeasoning(name){
@@ -5005,6 +5007,29 @@ if(location.search.indexOf('test') >= 0){
       if(ids[x.id]) bad.push('重 id ' + x.id); ids[x.id] = 1;
     });
     return SEED.length >= 40 && bad.length === 0;
+  })());
+
+  chk('新菜：意面和肉末豆腐蒸蛋都在包里，带来源和做法', (function(){
+    var a = SEED.filter(function(x){ return x.n === '番茄肉酱意面'; })[0];
+    var b = SEED.filter(function(x){ return x.n === '肉末豆腐蒸蛋'; })[0];
+    return !!a && !!b &&
+           a.cat === 'carb' && b.cat === 'protein' &&
+           a.author === '唐草田草田' && b.author === '笑笑Sister' &&
+           /^https:\/\/www\.xiachufang\.com\/recipe\//.test(a.src) &&
+           /^https:\/\/www\.xiachufang\.com\/recipe\//.test(b.src) &&
+           a.m.split('\n').length >= 5 && b.m.split('\n').length >= 5 &&
+           a.staple === 'pasta' && a.needs.indexOf('pasta') >= 0 &&
+           b.needs.indexOf('tofuSoft') >= 0 && b.needs.indexOf('porkMince') >= 0;
+  })());
+
+  chk('新菜：意面的用料都对得上已知食材，调料不当食材', (function(){
+    var a = SEED.filter(function(x){ return x.n === '番茄肉酱意面'; })[0];
+    var allKnown = a.needs.every(function(id){ return !!ING[id]; });
+    return allKnown &&
+           matchIng('意大利面') === 'pasta' &&
+           matchIng('意面') === 'pasta' &&
+           matchIng('番茄红绘调料') === null &&
+           matchIng('内酯豆腐') === 'tofuSoft';
   })());
 
   chk('装包：同名跳过，不覆盖自己改过的', (function(){
