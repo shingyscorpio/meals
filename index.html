@@ -271,6 +271,20 @@
     line-height:1;font-family:inherit;cursor:pointer;padding:0}
   mark.hl{background:#F6ECCE;color:inherit;border-radius:3px;padding:0 1px}
 
+  /* 今日灵感 */
+  .card.recs{background:#FBFAF5}
+  .recrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px dashed #F0ECE3}
+  .recrow:last-of-type{border-bottom:0}
+  .recmain{flex:1;min-width:0}
+  .recmain .nm{font-size:14px;font-weight:560;line-height:1.35}
+  .recmain .mt{font-size:11px;color:#9A9488;margin-top:2px;line-height:1.4}
+  .recbtn{flex:0 0 auto;display:flex;align-items:center;gap:5px}
+  .recbtn button{border:0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11.5px;
+    cursor:pointer;background:#F2EFE6;color:#5C574C;line-height:1.2}
+  .recbtn button:active{background:#EBE6DA}
+  .recbtn button[data-act="recTry"]{background:#E9F1EA;color:#2F5D46;font-weight:550}
+  .recbtn .recx{background:none;color:#C0B9AC;font-size:10px;padding:6px 1px}
+
   .rc{padding:12px 0;border-bottom:1px solid #F1EDE4}
   .rc:last-child{border-bottom:0}
   .rc .r1{display:flex;align-items:baseline;gap:8px}
@@ -440,7 +454,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-26 17:55';
+var BUILD = '2026-11-26 18:10';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -504,6 +518,7 @@ function dataDefaults(){
     recipes: [], edits:{}, hidden:[], extraIng:{}, pending: [],
     shelf:{}, shelfName:{},
     ings:{}, ingG:{}, groups: DEFAULT_GROUPS.slice(),
+    recs: null, recDone: {}, recFetched: 0,
     today: { date:'', skipped:[], locks:{}, pick:null, eaten:null, consumed:null }
   };
 }
@@ -2362,7 +2377,7 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false,
            gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null,
-           catOpen:null, gMove:null };
+           catOpen:null, gMove:null, recsAll:false };
 (function(){
   var t = (location.hash || '').replace('#','');
   if(['today','fridge','lib','log'].indexOf(t) >= 0) ui.tab = t;
@@ -2599,6 +2614,157 @@ function render(){
   window.scrollTo(0, 0);
 }
 
+/* ============================================================
+   今日灵感
+   每天早上 6:30 的任务往早餐库里追加一道菜，再导成 recs.json 推到仓库。
+   打开 app 顺手取一次，取到就在本机存一份——没网也还能看上次的。
+   两个出口分得很清楚：「试一试」只塞进今天这顿、不进库；
+   「收进菜谱」才真正落进菜谱，从此参与推荐。
+   ============================================================ */
+var REC_KEEP = 3;
+
+/* 还没处理过的：收进菜谱、或者点过「不看了」的就不再出现 */
+function recAll(){
+  return ((state.recs && state.recs.list) || []).filter(function(r){
+    return r && r.id && r.n && !state.recDone['r:' + r.id];
+  });
+}
+function recById(id){
+  var l = (state.recs && state.recs.list) || [];
+  for(var i = 0; i < l.length; i++){ if(l[i] && l[i].id === id) return l[i]; }
+  return null;
+}
+
+/* 一天只取一次，失败就安静地用上次的：早上急着看吃什么，不该卡在一个请求上 */
+function loadRecs(force){
+  if(typeof fetch !== 'function') return;
+  var now = todayStr();
+  var last = Number(state.recFetched || 0);
+  if(!force){
+    if(state.recs && state.recs.at === now) return;
+    if(Date.now() - last < 30 * 60 * 1000) return;
+  }
+  state.recFetched = Date.now();
+  fetch('./recs.json?d=' + now, { cache:'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if(!d || !d.recs || !d.recs.length) return;
+      state.recs = { at: d.at || now, list: d.recs };
+      save();
+      if(ui.tab === 'today') renderKeep();
+    })
+    .catch(function(){});
+}
+
+/* 早餐库的食材名 → 这边的食材 id。对不上就登记一条新食材，
+   但**不进库存**（只记「这道菜要用它」，不是「家里有它」） */
+function guessGroup(nm){
+  var s = String(nm);
+  if(/菠菜|生菜|油麦|茼蒿|空心菜|菜心|小白菜|香菜|韭菜|芹|罗勒|薄荷/.test(s)) return '叶菜';
+  if(/番茄|西红柿|黄瓜|茄子|西葫芦|彩椒|青椒|南瓜|冬瓜|丝瓜|秋葵|豆角|荷兰豆|苦瓜|芦笋/.test(s)) return '果菜';
+  if(/菌|菇|木耳|银耳|海带|紫菜|海苔/.test(s)) return '菌菇';
+  if(/红薯|土豆|萝卜|山药|芋|藕|玉米|洋葱|蒜|姜|葱/.test(s)) return '根茎';
+  if(/肉|鸡|牛|猪|羊|虾|鱼|培根|火腿|香肠|三文鱼/.test(s)) return '肉类';
+  if(/豆腐|豆干|腐竹|豆浆|毛豆|蛋白粉/.test(s)) return '豆制品';
+  if(/苹果|香蕉|蓝莓|橙|柠檬|莓|桃|梨|葡萄|牛油果/.test(s)) return '水果';
+  return '其他';
+}
+function recNeedIds(rec){
+  var out = [], seen = {};
+  (rec.needs || []).forEach(function(nm){
+    var id = matchIng(nm);
+    if(id){ if(!seen[id]){ seen[id] = 1; out.push(id); } return; }
+    var clean = normIngName(nm);
+    if(!clean || seen[clean]) return;
+    seen[clean] = 1;
+    var nid = newIngId();
+    state.ings[nid] = { n: clean, g: guessGroup(clean), d: 3 };
+    out.push(nid);
+  });
+  return out;
+}
+/* 一道推荐菜 → 这边的菜谱草稿。时间、火、锅都按做法推，实在推不准也就是个默认值，
+   反正落库后能改 */
+function recToDraft(rec){
+  var needs = recNeedIds(rec);
+  var s = (rec.needs || []).join(' ');
+  var cat = /鸡蛋|蛋|鸡胸|鸡腿|牛肉|猪肉|羊肉|虾|鱼|豆腐|酸奶|牛奶|芝士|火腿|金枪鱼|培根|毛豆|蛋白粉/.test(s) ? 'protein'
+          : /吐司|面包|燕麦|米|红薯|玉米|面条|荞麦|贝果|馒头|藜麦|卷饼|土豆|面皮/.test(s) ? 'carb'
+          : 'fiber';
+  var fire = rec.method === '煎' ? 'watch'
+           : (rec.method === '微波' || rec.method === '免煮' || rec.method === '搅拌') ? 'off'
+           : 'none';
+  var vessel = rec.method === '煎' ? 'pan'
+             : rec.method === '煮' ? 'water'
+             : rec.method === '蒸' ? 'steamer'
+             : rec.method === '微波' ? 'microwave'
+             : rec.method === '烤' ? 'airfryer' : 'none';
+  var cook = Math.max(1, Number(rec.cook) || 5);
+  var lines = [];
+  if((rec.prep || []).length) lines.push('前一晚：' + rec.prep.join('；'));
+  (rec.steps || []).forEach(function(x, i){ lines.push((i + 1) + '. ' + x); });
+  return {
+    n: rec.n, cat: cat, hand: cook, wall: cook, fire: fire, vessel: vessel,
+    staple: needs[0] || '', needs: needs, taste: [0, 0, 0],
+    cuisine: rec.cuisine || '中式', lv: 'L1', m: lines.join('\n'), prep: [],
+    key: 'rc:' + rec.id,
+    note: (rec.tags || []).join(' · ')
+  };
+}
+
+/* 试一试：只加进今天，不动菜谱库 */
+function recTry(id){
+  var rec = recById(id);
+  if(!rec) return;
+  if(!state.today.pick){ toast('今天这顿还没排出来，先去加几道菜'); return; }
+  var d = recToDraft(rec);
+  d.id = 'rc_' + id;
+  addExtra(d);
+}
+/* 收进菜谱：落库，以后再装包也不会被覆盖 */
+function recKeep(id){
+  var rec = recById(id);
+  if(!rec) return;
+  var d = recToDraft(rec);
+  saveRecipe(d);
+  state.recDone['r:' + id] = 1;
+  save();
+  render();
+  toast('「' + rec.n + '」收进菜谱了');
+}
+function recSkip(id){
+  state.recDone['r:' + id] = 1;
+  save(); render();
+  toast('这条不再出现');
+}
+
+function viewRecsHtml(){
+  var all = recAll();
+  if(!all.length) return '';
+  var got = ui.recsAll ? all : all.slice(0, REC_KEEP);
+  var at = (state.recs && state.recs.at) ? String(state.recs.at).slice(5).replace('-', '/') + ' 更新' : '';
+  var h = '<div class="card recs"><div class="card-h"><b>今日灵感</b><span>' +
+          (at ? at + ' · ' : '') + all.length + ' 道</span></div>';
+  h += '<div class="hint" style="margin:-4px 0 4px">每天 6:30 加一道 · 试一试只进今天，收进菜谱才落库</div>';
+  got.forEach(function(r){
+    /* 「新灵感」这条对每道都成立，摆在每一行上等于没说 */
+    var tags = (r.tags || []).filter(function(t){ return t && t !== '新灵感'; }).slice(0, 2);
+    var meta = [(r.cook ? r.cook + '′' : ''), r.method, r.cuisine, tags.join('/')].filter(Boolean).join(' · ');
+    h += '<div class="recrow"><div class="recmain">' +
+         '<div class="nm">' + esc(r.n) + '</div>' +
+         '<div class="mt">' + esc(meta) + '</div></div>' +
+         '<div class="recbtn">' +
+         '<button data-act="recTry" data-id="' + esc(r.id) + '">试一试</button>' +
+         '<button data-act="recKeep" data-id="' + esc(r.id) + '">收进菜谱</button>' +
+         '<button class="recx" data-act="recSkip" data-id="' + esc(r.id) + '" title="不看了">✕</button>' +
+         '</div></div>';
+  });
+  if(all.length > REC_KEEP){
+    h += '<button class="morebtn" data-act="recMore">' + (ui.recsAll ? '收起点' : '看全部 ' + all.length + ' 道') + '</button>';
+  }
+  return h;
+}
+
 function viewToday(){
   var pick = state.today.pick;
   if(!pick){
@@ -2632,6 +2798,9 @@ function viewToday(){
   if(state.today.eaten){
     h += '<div class="banner">已记入历史，库存也扣掉了。<button data-act="undoEat">改主意</button></div>';
   }
+
+  /* 每日灵感：有新东西就先让人看一眼，但排在今天这顿之前不抢戏 */
+  h += viewRecsHtml();
 
   h += '<div class="card">';
   h += '<div class="card-h"><span>今天给你排好了</span><b>' + ev.hand + '′ 动手</b></div>';
@@ -3740,6 +3909,10 @@ document.addEventListener('click', function(e){
   else if(act === 'unextra'){ removeExtra(id); }
   else if(act === 'clashYes'){ clashConfirm(); }
   else if(act === 'clashNo'){ clashCancel(); }
+  else if(act === 'recTry'){ recTry(id); }
+  else if(act === 'recKeep'){ recKeep(id); }
+  else if(act === 'recSkip'){ recSkip(id); }
+  else if(act === 'recMore'){ ui.recsAll = !ui.recsAll; render(); }
   else if(act === 'addslot'){ ui.tab = 'lib'; ui.libCat = el.dataset.cat; ui.libQ = ''; render(); }
 
   /* 菜谱 */
@@ -5272,6 +5445,67 @@ if(location.search.indexOf('test') >= 0){
     return h.indexOf('找到 ') < 0 && h.indexOf('class="rc"') >= 0 && h.indexOf('id="libQ"') >= 0;
   })());
 
+  /* ---------- 每日灵感（早餐库 6:30 那道） ---------- */
+  chk('灵感：有清单才出现，两条出口都在', (function(){
+    state.recs = { at: todayStr(), list: [
+      { id:'n18', n:'红薯燕麦软糕淋酸奶', cook:12, method:'蒸', cuisine:'中式',
+        needs:['红薯','燕麦片','鸡蛋','牛奶','希腊酸奶','蓝莓'],
+        prep:['前一晚把红薯蒸熟压泥，和燕麦牛奶拌匀冷藏'],
+        steps:['薯泥糊里打一个鸡蛋拌匀','上锅中火蒸 10 分钟'], tags:['新灵感','软糯'] },
+      { id:'n17', n:'葱香芝士蛋煎馒头片', cook:8, method:'煎', cuisine:'中式',
+        needs:['馒头','鸡蛋','芝士片'], prep:[], steps:['馒头切片','裹蛋液煎'], tags:['快手'] }
+    ]};
+    state.recDone = {};
+    var h = viewRecsHtml();
+    return h.indexOf('今日灵感') >= 0 && h.indexOf('红薯燕麦软糕淋酸奶') >= 0 &&
+           h.indexOf('data-act="recTry"') >= 0 && h.indexOf('data-act="recKeep"') >= 0 &&
+           h.indexOf('试一试') >= 0 && h.indexOf('收进菜谱') >= 0;
+  })());
+  chk('灵感：清单空了整块就不出现', (function(){
+    var keep = state.recs;
+    state.recs = { at: todayStr(), list: [] };
+    var h = viewRecsHtml();
+    state.recs = keep;
+    return h === '';
+  })());
+  chk('灵感：食材名对得上已有食材，对不上的只登记、不凭空进库存', (function(){
+    var rec = state.recs.list[0];
+    var invBefore = state.inventory.length;
+    var d = recToDraft(rec);
+    return d.needs.length === rec.needs.length &&
+           d.needs.indexOf(matchIng('鸡蛋')) >= 0 &&
+           state.inventory.length === invBefore &&
+           d.m.indexOf('前一晚') === 0 &&
+           d.cat === 'protein' && d.fire === 'none' && d.vessel === 'steamer';
+  })());
+  chk('灵感：试一试 只进今天这顿，不动菜谱库', (function(){
+    state.settings.window = 60;
+    ensurePick();
+    var before = state.recipes.length;
+    var rec = state.recs.list[1];
+    recTry(rec.id);
+    var inToday = (state.today.pick.combo.extra || []).some(function(x){ return x && x.id === 'rc_' + rec.id; });
+    state.settings.window = 15;
+    return inToday && state.recipes.length === before;
+  })());
+  chk('灵感：收进菜谱 真落库，并从灵感块里消失', (function(){
+    var before = state.recipes.length;
+    var rec = state.recs.list[0];
+    recKeep(rec.id);
+    var hit = state.recipes.filter(function(x){ return x.key === 'rc:' + rec.id; })[0];
+    return state.recipes.length === before + 1 && !!hit && (hit.needs || []).length === rec.needs.length &&
+           viewRecsHtml().indexOf(rec.n) < 0;
+  })());
+  chk('灵感：点过「不看了」的也不再出现', (function(){
+    var rec = state.recs.list[1];
+    recSkip(rec.id);
+    return viewRecsHtml().indexOf(rec.n) < 0;
+  })());
+  chk('灵感：收进来的菜带 my 标记，装包不会冲掉', (function(){
+    var hit = state.recipes.filter(function(x){ return String(x.key || '').indexOf('rc:') === 0; })[0];
+    return !!hit && hit.my === 1;
+  })());
+
   chk('编辑器：只有菜名要打字，判断收成一行字', (function(){
     ui.draft = emptyDraft('protein'); ui.draft._pasteOpen = 1; ui.impInfo = ''; ui.pendFrom = '';
     ui.autoOpen = false;
@@ -6034,6 +6268,10 @@ if(location.search.indexOf('seed') >= 0 && !state.history.length){
 }
 
 render();
+
+/* 先出首屏，再去取当天的灵感清单：取不到（没网 / 还没生成）就当没有，
+   不能因为一个请求把「今天吃什么」挡在门外 */
+if(location.search.indexOf('test') < 0) loadRecs();
 
 /* ?new=1 直接打开「加一道菜」，方便在电脑上看版式；?edit=1 打开改菜谱 */
 if(location.search.indexOf('edit=1') >= 0){
