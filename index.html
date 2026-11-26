@@ -254,6 +254,23 @@
     font-size:12.5px;color:#5C574C;font-family:inherit;cursor:pointer}
   .chip.on{background:#2F5D46;border-color:#2F5D46;color:#fff}
   .chips.wrap{flex-wrap:wrap;overflow:visible}
+
+  /* 菜谱搜索：粘在顶上，列表滚到哪儿都能直接改词 */
+  .sbar{position:sticky;top:0;z-index:6;background:#F4F2EC;padding:2px 0 10px;margin:-2px 0 0}
+  .sbar .sbw{position:relative}
+  .sbar input{width:100%;border:1px solid #E7E2D7;background:#fff;border-radius:12px;
+    padding:10px 36px 10px 33px;font-family:inherit;font-size:14px;color:#201E19;
+    -webkit-appearance:none;line-height:1.3}
+  .sbar input::-webkit-search-cancel-button,.sbar input::-webkit-search-decoration{-webkit-appearance:none;display:none}
+  .sbar input::placeholder{color:#B5AFA2}
+  .sbar input:focus{outline:0;border-color:#2F5D46}
+  .sbar .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;
+    color:#B5AFA2;pointer-events:none;line-height:1}
+  .sbar .sx{position:absolute;right:5px;top:50%;transform:translateY(-50%);border:0;
+    background:#EFEBE1;color:#6B665B;width:24px;height:24px;border-radius:50%;font-size:12px;
+    line-height:1;font-family:inherit;cursor:pointer;padding:0}
+  mark.hl{background:#F6ECCE;color:inherit;border-radius:3px;padding:0 1px}
+
   .rc{padding:12px 0;border-bottom:1px solid #F1EDE4}
   .rc:last-child{border-bottom:0}
   .rc .r1{display:flex;align-items:baseline;gap:8px}
@@ -423,7 +440,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-26 17:30';
+var BUILD = '2026-11-26 17:55';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2340,7 +2357,7 @@ function morningPlan(combo){
    行为
    ============================================================ */
 var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:null, addGrp:'叶菜', addDays:3,
-           draft:null, impMsg:null, pasteTxt:'', ingQ:'',
+           draft:null, impMsg:null, pasteTxt:'', ingQ:'', libQ:'',
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false,
@@ -2763,35 +2780,67 @@ function dateLabel(){
   return (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日 · ' + w;
 }
 
-function viewLib(){
-  var cats = [{k:'all',n:'全部'},{k:'protein',n:'蛋白'},{k:'fiber',n:'纤维'},{k:'carb',n:'碳水'}];
-  var h = '<div class="top"><div><div class="date">共 ' + ITEMS.length + ' 条</div><h1>菜谱</h1></div></div>';
-  if(ui.addMode){
-    h += '<div class="pendbar" style="cursor:default">正在给今天这顿加菜——点任意一道后面的「加」就放进去，' +
-         '可以多加几道，三类不限。<div style="margin-top:8px">' +
-         '<button class="btn btn-ghost" data-act="adddone" style="font-size:12.5px;padding:6px 12px">回到今天</button>' +
-         '</div></div>';
+/* ============================================================
+   菜谱搜索
+   搜的是「脑子里冒出来的那个词」，所以不限定只搜菜名：
+   菜名、用料、作者/标题、做法正文，任意一处对上都算，而且告诉你
+   是哪一处对上的——搜「西葫芦」时列表上标「用到 西葫芦」，
+   比自己挨道回想快得多。
+   ============================================================ */
+function libQ(){ return String(ui.libQ || '').trim(); }
+
+function libHits(it, q){
+  if(!q) return null;
+  var ql = q.toLowerCase();
+  if(String(it.n || '').toLowerCase().indexOf(ql) >= 0) return { why:'n' };
+  var ing = (it.needs || []).filter(function(id){
+    return String(ingName(id) || '').toLowerCase().indexOf(ql) >= 0;
+  })[0];
+  if(ing) return { why:'ing', ing:ing };
+  if((String(it.author || '') + ' ' + String(it.title || '')).toLowerCase().indexOf(ql) >= 0) return { why:'a' };
+  var m = String(it.m || ''), i = m.toLowerCase().indexOf(ql);
+  if(i >= 0){
+    var s = m.lastIndexOf('\n', i) + 1;
+    var e = m.indexOf('\n', i);
+    if(e < 0) e = m.length;
+    return { why:'m', line: m.slice(s, e) };
   }
-  var pendN = (state.pending || []).length;
-  h += '<div class="actions" style="margin:0 0 12px">' +
-       '<button class="btn btn-primary" data-act="rNew" style="font-size:14px">＋ 加一道菜</button>' +
-       (pendN ? '<button class="btn btn-ghost" data-act="rPending" style="font-size:14px">待补录 ' + pendN + ' 道</button>' : '') +
-       '</div>';
-  h += '<div class="chips">';
-  cats.forEach(function(c){
-    h += '<button class="chip' + (ui.libCat === c.k ? ' on' : '') + '" data-act="libcat" data-cat="' + c.k + '">' + c.n +
-         (c.k === 'all' ? ' ' + ITEMS.length : ' ' + pool(c.k).length) + '</button>';
-  });
-  h += '</div>';
-  h += '<div class="card">';
+  return null;
+}
+
+/* 命中的字打黄底。先转义再加标记，免得菜名里的 < 把结构冲坏 */
+function hlTxt(s, q){
+  var e = esc(String(s == null ? '' : s));
+  if(!q) return e;
+  var p = esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try{ return e.replace(new RegExp(p, 'gi'), function(m0){ return '<mark class="hl">' + m0 + '</mark>'; }); }
+  catch(err){ return e; }
+}
+
+function libListHtml(){
+  var q = libQ();
   var list = ITEMS.filter(function(x){ return ui.libCat === 'all' || x.cat === ui.libCat; });
-  if(!list.length) h += '<div class="empty">这一格空了。点上面「新建菜谱」补一道。</div>';
+  if(q) list = list.filter(function(x){ return !!libHits(x, q); });
+
+  var h = '';
+  if(q) h += '<div class="card-h"><b>搜「' + esc(q) + '」</b><span>找到 ' + list.length + ' 道</span></div>';
+  if(!list.length){
+    if(q){
+      h += '<div class="empty">没找到。搜的是菜名、用料、作者和做法正文——换个词，或者先切回「全部」。</div>' +
+           '<button class="btn btn-ghost" data-act="libQClear" style="font-size:13px;margin-top:6px">清空搜索</button>';
+    }else{
+      h += '<div class="empty">这一格空了。点上面「新建菜谱」补一道。</div>';
+    }
+    return h;
+  }
   list.forEach(function(it){
+    var hit = q ? libHits(it, q) : null;
     var inCombo = (state.today.pick ? slotsOf(state.today.pick.combo) : [])
                   .some(function(x){ return x && x.id === it.id; });
     /* 料齐没齐，列表里就告诉你——不用点进去、更不用跑去冰箱页对着看 */
     var missN = (it.needs || []).filter(function(id){ return !stockedOf(id); }).length;
-    var tags = '<span class="tag">' + it.wall + '′</span>' +
+    var tags = (hit && hit.why === 'ing' ? '<span class="tag ok">用到 ' + esc(ingName(hit.ing)) + '</span>' : '') +
+               '<span class="tag">' + it.wall + '′</span>' +
                '<span class="tag' + (it.fire === 'watch' ? ' warn' : '') + '">' + FIRE[it.fire] + '</span>' +
                ((it.needs || []).length
                  ? (missN ? '<span class="tag warn">缺 ' + missN + ' 样</span>' : '<span class="tag ok">料齐</span>')
@@ -2804,19 +2853,61 @@ function viewLib(){
     /* 导入的菜做法常常十来行，列表里默认折三行，要看再展开 */
     var isLong = mTxt.split('\n').length > 3 || mTxt.length > 140;
     var open = !!ui.openM[it.id];
-    h += '<div class="rc"><div class="r1"><span class="n">' + esc(it.n) + '</span>' +
+    /* 命中落在做法里（菜名/用料里都没有这个词）：把那一行顶上来，
+       不然「找到了」却看不见词，等于让人自己去翻 */
+    var snip = (hit && hit.why === 'm' && !open) ? '… ' + hit.line : '';
+    h += '<div class="rc"><div class="r1"><span class="n">' + hlTxt(it.n, q) + '</span>' +
          (inCombo ? '<span class="tag ok">在今天的餐里</span>'
                   : '<button data-act="use" data-id="' + it.id + '">' +
                     (ui.addMode ? '加' : '换这个') + '</button>') +
          '<button data-act="rEdit" data-id="' + it.id + '" title="编辑" ' +
            'style="background:none;color:#A9A398;padding:4px 6px;font-size:14px">✎</button>' +
          '</div><div class="r2">' + tags + srcLink(it.src) + authorTag(it) + '</div>' +
-         '<div class="r3' + (isLong && !open ? ' clamp' : '') + '">' + rich(mTxt) + '</div>' +
+         '<div class="r3' + (isLong && !open ? ' clamp' : '') + '">' + rich(snip || mTxt) + '</div>' +
          (isLong ? '<button class="morebtn" data-act="rmore" data-id="' + it.id + '">' +
                    (open ? '收起' : '展开做法') + '</button>' : '') +
          '</div>';
   });
+  return h;
+}
+
+/* 只重画列表：整页重绘会把输入框和光标一起冲掉，打字变成折磨 */
+function refreshLibList(){
+  var box = document.getElementById('libList');
+  if(box) box.innerHTML = libListHtml();
+  var x = document.getElementById('libQX');
+  if(x) x.style.display = libQ() ? '' : 'none';
+}
+
+function viewLib(){
+  var cats = [{k:'all',n:'全部'},{k:'protein',n:'蛋白'},{k:'fiber',n:'纤维'},{k:'carb',n:'碳水'}];
+  var q = libQ();
+  var h = '<div class="top"><div><div class="date">共 ' + ITEMS.length + ' 条</div><h1>菜谱</h1></div></div>';
+  if(ui.addMode){
+    h += '<div class="pendbar" style="cursor:default">正在给今天这顿加菜——点任意一道后面的「加」就放进去，' +
+         '可以多加几道，三类不限。<div style="margin-top:8px">' +
+         '<button class="btn btn-ghost" data-act="adddone" style="font-size:12.5px;padding:6px 12px">回到今天</button>' +
+         '</div></div>';
+  }
+  h += '<div class="sbar"><div class="sbw">' +
+       '<span class="si">🔍</span>' +
+       '<input id="libQ" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" ' +
+         'autocorrect="off" autocapitalize="off" spellcheck="false" ' +
+         'placeholder="搜菜名、用料、作者" value="' + esc(q) + '" />' +
+       '<button id="libQX" class="sx" data-act="libQClear" style="display:' + (q ? '' : 'none') + '">✕</button>' +
+       '</div></div>';
+  var pendN = (state.pending || []).length;
+  h += '<div class="actions" style="margin:0 0 12px">' +
+       '<button class="btn btn-primary" data-act="rNew" style="font-size:14px">＋ 加一道菜</button>' +
+       (pendN ? '<button class="btn btn-ghost" data-act="rPending" style="font-size:14px">待补录 ' + pendN + ' 道</button>' : '') +
+       '</div>';
+  h += '<div class="chips">';
+  cats.forEach(function(c){
+    h += '<button class="chip' + (ui.libCat === c.k ? ' on' : '') + '" data-act="libcat" data-cat="' + c.k + '">' + c.n +
+         (c.k === 'all' ? ' ' + ITEMS.length : ' ' + pool(c.k).length) + '</button>';
+  });
   h += '</div>';
+  h += '<div class="card" id="libList">' + libListHtml() + '</div>';
   h += '<div class="foot" style="padding-bottom:18px">点「换这个」替换到对应那一格，其余不动 · 点 ✎ 改菜谱</div>';
   return h;
 }
@@ -3639,16 +3730,17 @@ document.addEventListener('click', function(e){
   else if(act === 'eat'){ eat(); }
   else if(act === 'undoEat'){ undoTodaysEat(); }
   else if(act === 'libcat'){ ui.libCat = el.dataset.cat; render(); }
+  else if(act === 'libQClear'){ ui.libQ = ''; render(); }
   else if(act === 'use'){
     var _it = findItem(id);
     if(ui.addMode) addExtra(_it); else pickFromLib(_it);
   }
-  else if(act === 'addmore'){ ui.addMode = true; ui.tab = 'lib'; ui.libCat = 'all'; render(); }
+  else if(act === 'addmore'){ ui.addMode = true; ui.tab = 'lib'; ui.libCat = 'all'; ui.libQ = ''; render(); }
   else if(act === 'adddone'){ ui.addMode = false; ui.tab = 'today'; render(); }
   else if(act === 'unextra'){ removeExtra(id); }
   else if(act === 'clashYes'){ clashConfirm(); }
   else if(act === 'clashNo'){ clashCancel(); }
-  else if(act === 'addslot'){ ui.tab = 'lib'; ui.libCat = el.dataset.cat; render(); }
+  else if(act === 'addslot'){ ui.tab = 'lib'; ui.libCat = el.dataset.cat; ui.libQ = ''; render(); }
 
   /* 菜谱 */
   else if(act === 'rNew'){ openEditor(null); }
@@ -3935,6 +4027,8 @@ document.addEventListener('input', function(e){
   if(!t) return;
   if(t.id === 'f_paste') ui.pasteTxt = t.value;
   else if(t.id === 'f_ingq') ui.ingQ = t.value;
+  /* 菜谱搜索：边打边筛，只重画列表，光标不会被打断 */
+  else if(t.id === 'libQ'){ ui.libQ = t.value; refreshLibList(); }
   else if(t.id === 'rsTxt') ui.rsTxt = t.value;
   /* 这两格输入完常要去点分组，面板会整体重绘；不存起来就等于白打 */
   else if(t.id === 'cusName'){
@@ -3977,6 +4071,13 @@ document.addEventListener('paste', function(e){
 
 /* 自定义输入：回车直接加入，不用去点按钮 */
 document.addEventListener('keydown', function(e){
+  /* 菜谱搜索：回车收键盘（手机上收起来才看得见结果），Esc 清空重来 */
+  var sb = e.target;
+  if(sb && sb.id === 'libQ'){
+    if(e.key === 'Enter'){ e.preventDefault(); if(sb.blur) sb.blur(); }
+    else if(e.key === 'Escape'){ e.preventDefault(); ui.libQ = ''; render(); }
+    return;
+  }
   if(e.key !== 'Enter') return;
   var t = e.target;
   if(!t) return;
@@ -5086,6 +5187,89 @@ if(location.search.indexOf('test') >= 0){
     ui.tab = 'lib';
     var v = viewLib();
     return v.indexOf('＋ 加一道菜') >= 0 && v.indexOf('导入 / 补录') < 0;
+  })());
+
+  /* ---------- 菜谱搜索 ---------- */
+  chk('搜索：搜菜名命中，命中的字打上标记', (function(){
+    ui.tab = 'lib'; ui.libCat = 'all'; ui.libQ = '蒸蛋';
+    var h = viewLib();
+    var hit = ITEMS.filter(function(x){ return String(x.n).indexOf('蒸蛋') >= 0; })[0];
+    return !!hit && h.indexOf('<mark class="hl">蒸蛋</mark>') >= 0 && h.indexOf('找到 ') >= 0;
+  })());
+  chk('搜索：搜用料能查到，并标出「用到 X」', (function(){
+    /* 挑一个「只在用料里、不在菜名里」的词，才是真的在验用料搜索 */
+    var it = null, w = '';
+    ITEMS.forEach(function(x){
+      if(it) return;
+      (x.needs || []).forEach(function(id){
+        if(it) return;
+        var nm = String(ingName(id));
+        if(nm.length >= 2 && String(x.n).indexOf(nm) < 0){ it = x; w = nm; }
+      });
+    });
+    if(!it) return true;
+    ui.libQ = w;
+    var r = libHits(it, w);
+    var h = viewLib();
+    return !!r && r.why === 'ing' && h.indexOf('用到 ' + esc(w)) >= 0 && h.indexOf(esc(it.n)) >= 0;
+  })());
+  chk('搜索：搜作者名能命中', (function(){
+    var a = ITEMS.filter(function(x){ return x.author; })[0];
+    ui.libQ = a.author;
+    var r = libHits(a, a.author);
+    return !!a && !!r && viewLib().indexOf('找到 ') >= 0;
+  })());
+  chk('搜索：命中在做法里时，把那一行顶上来', (function(){
+    var it = null, w = '';
+    ITEMS.forEach(function(x){
+      if(it) return;
+      String(x.m || '').split('\n').some(function(line){
+        var t = line.replace(/^[\s\d.、]+/, '');
+        if(t.length < 6) return false;
+        var cand = t.slice(0, 2);
+        var inName = String(x.n).indexOf(cand) >= 0;
+        var isIng = (x.needs || []).some(function(id){ return String(ingName(id)).indexOf(cand) >= 0; });
+        if(inName || isIng) return false;
+        it = x; w = cand; return true;
+      });
+    });
+    if(!it) return true;                 /* 没有合适样本就不算失败 */
+    ui.libQ = w;
+    var r = libHits(it, w);
+    var h = viewLib();
+    return !!r && r.why === 'm' && h.indexOf('… ') >= 0;
+  })());
+  chk('搜索：没找到给明话 + 一键清空', (function(){
+    ui.libQ = 'zzz查无此菜';
+    var h = viewLib();
+    return h.indexOf('没找到') >= 0 && h.indexOf('data-act="libQClear"') >= 0 && h.indexOf('class="rc"') < 0;
+  })());
+  chk('搜索：词里带尖括号不会冲坏页面', (function(){
+    ui.libQ = '<img>';
+    var h = viewLib();
+    return h.indexOf('<img>') < 0 && h.indexOf('&lt;img&gt;') >= 0;
+  })());
+  chk('搜索：和分类叠加，只在当前类里找', (function(){
+    ui.libCat = 'protein'; ui.libQ = '鸡';
+    var want = ITEMS.filter(function(x){ return x.cat === 'protein' && libHits(x, '鸡'); }).length;
+    var h = viewLib();
+    var ok = h.indexOf('找到 ' + want + ' 道') >= 0;
+    ui.libCat = 'all';
+    return ok;
+  })());
+  chk('搜索：边打字只换列表，不重绘整页（光标不丢）', (function(){
+    ui.libQ = '蛋';
+    var box = document.getElementById('libList');
+    box.innerHTML = '';
+    refreshLibList();
+    var ok = box.innerHTML.indexOf('找到 ') >= 0 && box.innerHTML.indexOf('class="rc"') >= 0;
+    ui.libQ = '';
+    return ok;
+  })());
+  chk('搜索：清空后回到全部菜谱', (function(){
+    ui.libQ = ''; ui.libCat = 'all';
+    var h = viewLib();
+    return h.indexOf('找到 ') < 0 && h.indexOf('class="rc"') >= 0 && h.indexOf('id="libQ"') >= 0;
   })());
 
   chk('编辑器：只有菜名要打字，判断收成一行字', (function(){
