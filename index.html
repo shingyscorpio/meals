@@ -511,7 +511,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-27 22:49';
+var BUILD = '2026-11-27 22:59';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -1911,17 +1911,77 @@ function saveRecipe(d){
   var hit = -1;
   state.recipes.forEach(function(x, k){ if(x.id === d.id) hit = k; });
   if(hit >= 0) state.recipes[hit] = item; else state.recipes.push(item);
-  rebuildItems(); dropPickIfTouched(d.id); save();
+  rebuildItems(); syncPickItem(item); save();
   return d.id;
 }
-/* 改了/删了正在今天这顿里的菜，就让它重排，别留一道已经不存在的菜 */
-function dropPickIfTouched(id){
+/* 改了/删了正在今天这顿里的菜 --------------------------------------------------
+   原来只有一句 dropPickIfTouched：只要碰到的菜在今天的格子里，就把整份 pick 扔掉，
+   等下次 render 时 ensurePick 重排。后果是「去改一下某道菜的用料，回来发现三样全换了」，
+   而且 locks 还指着旧 id，recommend 的第二层兜底会清 locks 再排一遍，手动挑的也白挑。
+
+   现在只动被牵连的那一格：人没点「换一道」，就不该替他换菜。 */
+function pickSlotOf(id){
   var pk = state.today && state.today.pick;
-  if(!pk || !pk.combo) return;
-  var hit = slotsOf(pk.combo).some(function(x){ return x && x.id === id; });
-  /* 只重排，不动 eaten：已经记过账了，把记账状态清掉会让「就吃这个」再记一次，
-     同一天写两条记录、库存扣两轮，而 consumed 已被覆盖，多扣的那份永远还不回来 */
-  if(hit){ state.today.pick = null; }
+  if(!pk || !pk.combo) return '';
+  var k = ['protein', 'fiber', 'carb'];
+  for(var i = 0; i < k.length; i++){
+    if(pk.combo[k[i]] && pk.combo[k[i]].id === id) return k[i];
+  }
+  return '';
+}
+
+/* 编辑：同类就地换成改完这版，位置和锁定都不动 */
+function syncPickItem(it){
+  if(!it || !it.id) return;
+  var pk = state.today && state.today.pick;
+  var slot = pickSlotOf(it.id);
+  if(!pk || !slot) return;
+  if(it.cat !== slot){
+    /* 从「碳水」改成「纤维」，这道就不能再站在碳水格里了：只补这一格 */
+    pk.combo[slot] = null;
+    if(state.today.locks[slot] === it.id) state.today.locks[slot] = null;
+    refillSlot(slot);
+    return;
+  }
+  pk.combo[slot] = it;
+  pk.ev = evaluate(pk.combo, todayStr(), {force:true});
+  pk.forced = pk.ev.ok ? 0 : 1;
+}
+
+/* 从同类里挑一个顶上：另外两格钉死，能过校验的优先，其次分数高的 */
+function refillSlot(cat){
+  var pk = state.today && state.today.pick;
+  if(!pk || !pk.combo || !cat) return null;
+  var base = pk.combo;
+  var cur = base[cat];
+  var sk = state.today.skipped || [];
+  var wk = weekendMode();
+  var best = null;
+  pool(cat).forEach(function(x){
+    if(!x || (cur && x.id === cur.id)) return;
+    if(sk.indexOf(x.id) >= 0) return;
+    if(x.wk && !wk) return;
+    var c = {protein:base.protein, fiber:base.fiber, carb:base.carb, extra:(base.extra || []).slice()};
+    c[cat] = x;
+    if(cat === 'protein' && x.fiber) c.fiber = null;
+    var ev = evaluate(c, todayStr(), {force:true});
+    var score = (ev.ok ? 1e6 : 0) + (ev.score || 0);
+    if(!best || score > best.score) best = {c:c, ev:ev, score:score};
+  });
+  if(!best){
+    /* 补不到就留空，让人自己点一道——总比把另外两格也换掉强 */
+    base[cat] = null;
+    pk.ev = evaluate(base, todayStr(), {force:true});
+    pk.forced = 1;
+    toast('今天的' + CAT_LABEL[cat] + '这道没了，你自己补一道');
+    return null;
+  }
+  pk.combo = best.c;
+  pk.ev = best.ev;
+  pk.forced = best.ev.ok ? 0 : 1;
+  /* 锁跟着换过去，否则下次「换一道」会锁着一道已删的菜 */
+  if(cur && state.today.locks[cat] === cur.id) state.today.locks[cat] = best.c[cat] ? best.c[cat].id : null;
+  return best.c[cat];
 }
 /* 删除：每类至少留 3 道，否则组合就凑不齐了 */
 function deleteRecipe(id){
@@ -1930,10 +1990,11 @@ function deleteRecipe(id){
   var same = ITEMS.filter(function(x){ return x.cat === it.cat; });
   if(same.length <= 3) return '这类只剩 ' + same.length + ' 道，再删就排不出今天这顿了';
   if(state.hidden.indexOf(id) < 0) state.hidden.push(id);
-  /* 删除只藏不删：id 记进 hidden，条目还留在 recipes 里，
-     这样「恢复」能原样拿回来，也不至于手滑一次就没了 */
-  dropPickIfTouched(id);
-  rebuildItems(); save();
+  /* 删掉的是今天这格里的：只补这一格，另外两格不动 */
+  var slot = pickSlotOf(id);
+  rebuildItems();
+  if(slot) refillSlot(slot);
+  save();
   return null;
 }
 function restoreRecipe(id){
@@ -5675,13 +5736,18 @@ if(location.search.indexOf('test') >= 0){
   restoreRecipe(myId);
   chk('删掉的能恢复', !!findItem(myId));
 
-  /* 改动正在吃的菜，今天的餐要跟着重排 */
+  /* 改动正在吃的菜：只更新那一格，另外两格不动。
+     原来是整份 pick 扔掉再重排，用户改个用料回来发现三样全换了 */
   resetToday(); render();
   var rp = state.today.pick.combo.protein;
+  var cb0 = state.today.pick.combo.carb;
   var e2 = draftFrom(findItem(rp.id));
   e2.hand = Math.max(1, rp.hand + 1);
   saveRecipe(e2);
-  chk('改了正在吃的菜，今天这顿重排', state.today.pick === null);
+  chk('改了正在吃的菜：那一格跟着更新，其余不动',
+      !!state.today.pick && state.today.pick.combo.protein.id === rp.id &&
+      state.today.pick.combo.protein.hand === e2.hand &&
+      (state.today.pick.combo.carb ? state.today.pick.combo.carb.id : '') === (cb0 ? cb0.id : ''));
   render();
   chk('重排后仍有推荐', !!state.today.pick);
 
@@ -6058,6 +6124,65 @@ if(location.search.indexOf('test') >= 0){
     recTry(rec.id);
     var same = slotsOf(state.today.pick.combo).filter(function(x){ return x && x.id === 'rc_' + rec.id; }).length;
     return same === 1 && state.today.pick.combo === before;
+  })());
+  /* 数据变了不替人换菜。原来的实现是把整份 pick 扔掉再重排，
+     表现就是「去改一道菜的用料，回来三样全换了」 */
+  chk('改今天这顿里的菜：只更新那一格，另外两格原地不动', (function(){
+    resetToday(); render();
+    var bakR = JSON.parse(JSON.stringify(state.recipes));
+    var bakP = JSON.parse(JSON.stringify(state.today.pick));
+    var bakL = JSON.parse(JSON.stringify(state.today.locks));
+    var bakH = state.hidden.slice();
+    var c0 = state.today.pick.combo;
+    var p = c0.protein, f = c0.fiber, cb = c0.carb;
+    if(!p){ state.recipes = bakR; rebuildItems(); return false; }
+    saveRecipe({ id:p.id, n:p.n, cat:p.cat, hand:(p.hand || 5) + 2, wall:p.wall || 15,
+      fire:p.fire, vessel:p.vessel, staple:p.staple, needs:(p.needs || []).slice(),
+      taste:(p.taste || [0,0,0]).slice(), cuisine:p.cuisine, lv:p.lv,
+      m:'改过的做法\n1. 先这样', prep:[], src:p.src || '' });
+    var c1 = state.today.pick.combo;
+    var ok = !!c1 && !!c1.protein && c1.protein.id === p.id && c1.protein.hand === (p.hand || 5) + 2 &&
+             (c1.fiber ? c1.fiber.id : '') === (f ? f.id : '') &&
+             (c1.carb ? c1.carb.id : '') === (cb ? cb.id : '');
+    state.recipes = bakR; state.hidden = bakH; rebuildItems();
+    state.today.pick = bakP; state.today.locks = bakL;
+    return ok;
+  })());
+  chk('改菜谱时把分类改了：只补那一格，不整体重排', (function(){
+    resetToday(); render();
+    var bakR = JSON.parse(JSON.stringify(state.recipes));
+    var bakP = JSON.parse(JSON.stringify(state.today.pick));
+    var bakL = JSON.parse(JSON.stringify(state.today.locks));
+    var bakH = state.hidden.slice();
+    var c0 = state.today.pick.combo;
+    var p = c0.protein, cb = c0.carb;
+    if(!p){ state.recipes = bakR; rebuildItems(); return false; }
+    saveRecipe({ id:p.id, n:p.n, cat:'fiber', hand:p.hand, wall:p.wall, fire:p.fire, vessel:p.vessel,
+      staple:p.staple, needs:(p.needs || []).slice(), taste:(p.taste || [0,0,0]).slice(),
+      cuisine:p.cuisine, lv:p.lv, m:'改到纤维那类去了', prep:[], src:p.src || '' });
+    var c1 = state.today.pick.combo;
+    var ok = !!c1 && (!c1.protein || c1.protein.id !== p.id) &&
+             (c1.carb ? c1.carb.id : '') === (cb ? cb.id : '');
+    state.recipes = bakR; state.hidden = bakH; rebuildItems();
+    state.today.pick = bakP; state.today.locks = bakL;
+    return ok;
+  })());
+  chk('删掉今天这顿里的菜：只补那一格，不整体重排', (function(){
+    resetToday(); render();
+    var bakR = JSON.parse(JSON.stringify(state.recipes));
+    var bakP = JSON.parse(JSON.stringify(state.today.pick));
+    var bakL = JSON.parse(JSON.stringify(state.today.locks));
+    var bakH = state.hidden.slice();
+    var c0 = state.today.pick.combo;
+    var p = c0.protein, cb = c0.carb;
+    if(!p){ state.recipes = bakR; rebuildItems(); return false; }
+    var err = deleteRecipe(p.id);
+    var c1 = state.today.pick.combo;
+    var ok = !err && !!c1 && !!c1.protein && c1.protein.id !== p.id &&
+             (c1.carb ? c1.carb.id : '') === (cb ? cb.id : '');
+    state.recipes = bakR; state.hidden = bakH; rebuildItems();
+    state.today.pick = bakP; state.today.locks = bakL;
+    return ok;
   })());
   chk('灵感：写死的 cat / 时间 / 火 / 锅 / 出处，原样落进菜谱草稿', (function(){
     var d = recToDraft({ id:'m01', n:'茄汁鸡蛋豆腐', cook:18, method:'煎', cuisine:'中式',
