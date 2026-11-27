@@ -1,8 +1,71 @@
 {
  "at": "2026-11-27",
- "src": "breakfast/recipes.js",
- "total": 19,
+ "src": "breakfast/recipes.js + recs-extra.json",
+ "total": 20,
  "recs": [
+  {
+   "cat": "protein",
+   "staple": "tofuFirm",
+   "hand": 16,
+   "wall": 20,
+   "fire": "watch",
+   "vessel": "pan",
+   "lv": "L1",
+   "prepLabel": "下锅前",
+   "taste": [
+    1,
+    1,
+    0
+   ],
+   "ids": [
+    "tofuFirm",
+    "egg",
+    "tomato"
+   ],
+   "id": "m01",
+   "added": "2026-11-27",
+   "n": "茄汁鸡蛋豆腐",
+   "cuisine": "中式",
+   "method": "煎",
+   "cook": 18,
+   "prepMin": 5,
+   "why": "老豆腐先煎出壳再裹茄汁，酸甜口最下饭，一锅出 18 分钟；老豆腐比嫩豆腐扛翻，新手也不容易炒碎。",
+   "ref": {
+    "plat": "下厨房",
+    "title": "米饭杀手‼️超好吃的茄汁鸡蛋豆腐",
+    "author": "青迟的猫",
+    "url": "https://www.xiachufang.com/recipe/106180414/",
+    "score": "7.6",
+    "made": "642",
+    "say": "太出乎预料了，也太好吃了，以后豆腐都这么做！",
+    "match": "exact"
+   },
+   "needs": [
+    "老豆腐",
+    "鸡蛋",
+    "西红柿",
+    "番茄酱"
+   ],
+   "prep": [
+    "老豆腐 1 块（约 300g）先切 1.5cm 见方的块，上下垫厨房纸压 5 分钟，把水逼出来，等下煎不溅油也不容易碎",
+    "顺手把料汁调好放小碗：生抽 2 勺、蚝油半勺、白糖 1 小勺、玉米淀粉 5g、清水 60ml，搅匀备用"
+   ],
+   "steps": [
+    "调汁：小碗里放生抽 2 勺、蚝油半勺、白糖 1 小勺、鸡精 2g（可不放）、玉米淀粉 5g、清水 60ml，搅匀备用；番茄酱 50ml 单独放一边，后面才下锅，早了容易糊",
+    "老豆腐 1 块（约 300g）切成 1.5cm 见方的小块，块越小越入味；表面用厨房纸吸干，煎的时候不溅油、也不容易碎",
+    "平底锅中小火，倒 10g 油，豆腐块平铺进去别叠放，一面煎 3 分钟到金黄结壳再翻，另一面 2 分钟，盛出备用",
+    "同一口锅补 10g 油，1 个鸡蛋打散倒进去，中小火煎成蛋饼，用铲子划成和豆腐差不多大的块，盛出",
+    "番茄 1 个（约 200g）用开水烫 2 分钟去皮，切小丁；锅里留 5g 油，下番茄丁中火炒 1 分钟到出汁变软",
+    "倒 50ml 番茄酱和番茄一起炒匀，炒到颜色红亮、边上冒小泡（约 1 分钟），这一步决定成品香不香",
+    "把煎好的豆腐和蛋倒回锅里翻拌，让每块都裹上茄汁，再倒入步骤 1 的料汁，翻匀后转小火盖盖炖 5 分钟，中途翻一次，让豆腐吸饱汁",
+    "开盖收汁到汤汁能挂在勺背上（约 1 分钟），尝一下咸淡，撒一把葱花出锅；汤汁别收太干，拌饭全靠它，一人份就是这一盘配一碗米饭"
+   ],
+   "tags": [
+    "下饭",
+    "酸甜",
+    "一锅出"
+   ]
+  },
   {
    "id": "n19",
    "n": "金枪鱼芝士热压三明治",
@@ -45,7 +108,17 @@
     "新灵感",
     "一锅出",
     "拉丝芝士"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n18",
@@ -90,7 +163,17 @@
     "新灵感",
     "酸奶淋面",
     "软糯"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n17",
@@ -133,7 +216,17 @@
     "新灵感",
     "一锅出",
     "中式汉堡"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n16",
@@ -175,7 +268,17 @@
     "新灵感",
     "拉丝",
     "可带走"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n15",
@@ -219,12 +322,22 @@
     "高蛋白",
     "一锅出",
     "日式"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n14",
    "n": "一锅北非蛋配烤吐司",
-   "cuisine": "西式",
+   "cuisine": "中东",
    "method": "煎",
    "cook": 12,
    "prepMin": 5,
@@ -261,7 +374,17 @@
     "新灵感",
     "一锅出",
     "地中海"
-   ]
+   ],
+   "cat": "protein",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n13",
@@ -302,7 +425,17 @@
     "新灵感",
     "蛋糕口感",
     "高纤"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n12",
@@ -340,7 +473,17 @@
    "tags": [
     "拉丝",
     "新灵感"
-   ]
+   ],
+   "cat": "protein",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n11",
@@ -376,7 +519,17 @@
    "tags": [
     "3 分钟",
     "新灵感"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n10",
@@ -412,7 +565,17 @@
    "tags": [
     "零洗碗",
     "新灵感"
-   ]
+   ],
+   "cat": "protein",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n09",
@@ -451,7 +614,17 @@
    "tags": [
     "暖胃",
     "新灵感"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n08",
@@ -491,7 +664,17 @@
    "tags": [
     "可带走",
     "新灵感"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n07",
@@ -527,12 +710,22 @@
    "tags": [
     "高蛋白",
     "新灵感"
-   ]
+   ],
+   "cat": "protein",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n06",
    "n": "泰式香蕉燕麦煎饼",
-   "cuisine": "西式",
+   "cuisine": "泰式",
    "method": "煎",
    "cook": 9,
    "prepMin": 1,
@@ -563,7 +756,17 @@
    "tags": [
     "甜口",
     "新灵感"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n05",
@@ -603,12 +806,22 @@
    "tags": [
     "浓汤",
     "新灵感"
-   ]
+   ],
+   "cat": "protein",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n04",
    "n": "希腊酸奶黄瓜酱卷",
-   "cuisine": "轻食",
+   "cuisine": "地中海",
    "method": "免煮",
    "cook": 6,
    "prepMin": 2,
@@ -641,7 +854,17 @@
    "tags": [
     "清爽",
     "新灵感"
-   ]
+   ],
+   "cat": "fiber",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n03",
@@ -677,12 +900,22 @@
    "tags": [
     "甜咸",
     "新灵感"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n02",
    "n": "墨西哥牛油果蛋卷",
-   "cuisine": "西式",
+   "cuisine": "墨西哥",
    "method": "煎",
    "cook": 9,
    "prepMin": 2,
@@ -716,12 +949,22 @@
    "tags": [
     "拉丝",
     "新灵感"
-   ]
+   ],
+   "cat": "carb",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   },
   {
    "id": "n01",
    "n": "韩式泡菜蛋饼",
-   "cuisine": "中式",
+   "cuisine": "韩式",
    "method": "煎",
    "cook": 9,
    "prepMin": 2,
@@ -754,7 +997,17 @@
    "tags": [
     "开胃",
     "新灵感"
-   ]
+   ],
+   "cat": "protein",
+   "staple": null,
+   "hand": null,
+   "wall": null,
+   "fire": null,
+   "vessel": null,
+   "lv": null,
+   "prepLabel": null,
+   "taste": null,
+   "ids": null
   }
  ]
 }
