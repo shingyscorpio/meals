@@ -511,7 +511,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-27 17:47';
+var BUILD = '2026-11-27 22:49';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2721,24 +2721,29 @@ function recById(id){
   return null;
 }
 
-/* 一天只取一次，失败就安静地用上次的：早上急着看吃什么，不该卡在一个请求上 */
+/* 清单很小（不到 30KB），每次打开都对一次，失败就安静地用上次的：
+   早上急着看吃什么，不该卡在一个请求上 */
 function loadRecs(force){
   if(typeof fetch !== 'function') return;
   var now = todayStr();
   var last = Number(state.recFetched || 0);
-  if(!force){
-    /* 今天已经取到了就不再问网络 */
-    if(state.recs && state.recs.at === now) return;
-    /* 还没取到今天的，最多 5 分钟问一次。
-       原来这里挡 30 分钟：6:28 顺手开过一次 app，6:31 新菜推上来也看不到，
-       非得等半小时后再开一次，看起来就像「新菜没推成功」 */
-    if(Date.now() - last < 5 * 60 * 1000) return;
-  }
+  /* 只按分钟节流，给切前台那种反复触发兜个底。
+     这里原来还有一条「今天已经取到就不问网络」，看着省事，实际是个坑：
+     早上 6:30 取过一次以后，白天再推新菜（或手动补一道），手机上就永远看不到，
+     必须等第二天——找半天「新菜去哪了」就是这个原因 */
+  if(!force && Date.now() - last < 60 * 1000) return;
   state.recFetched = Date.now();
   fetch('./recs.json?d=' + now, { cache:'no-store' })
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(d){
       if(!d || !d.recs || !d.recs.length) return;
+      var txt = JSON.stringify(d.recs);
+      /* 内容一样就只更新时间戳：不然每开一次都要重绘一遍，
+         手上正展开的看着会跳 */
+      if(state.recs && JSON.stringify(state.recs.list) === txt){
+        state.recs.at = d.at || now;
+        return;
+      }
       state.recs = { at: d.at || now, list: d.recs };
       save();
       /* 在菜谱页就把那条窄带补上；正在搜东西就别打断人 */
