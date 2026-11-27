@@ -302,9 +302,14 @@
   .recitem:last-of-type{border-bottom:0}
   .recrow{display:flex;align-items:center;gap:9px}
   .recmain{flex:1;min-width:0}
+  /* 分类标签和菜名同一行：用 flex 排，菜名长了在自己那格里折行，
+     标签不会掉到第二行去（不然每道菜的高度都不一样，扫起来很乱） */
+  .recnm{display:flex;align-items:flex-start;gap:5px}
+  .recname{flex:1;min-width:0}
   .recname{border:0;background:none;padding:0;font-family:inherit;font-size:14px;font-weight:560;
     color:#3B372F;line-height:1.35;text-align:left;cursor:pointer}
-  .recname::after{content:' ›';color:#C3BCAD;font-weight:400;font-size:11px}
+  /* 箭头跟着最后一个字走：用 nbsp 连住，菜名折行时不会把它单独甩到下一行 */
+  .recname::after{content:'\00a0›';color:#C3BCAD;font-weight:400;font-size:11px}
   .recdet{margin:7px 0 1px;padding:8px 10px;background:#F7F4EB;border-radius:9px;
     font-size:12px;color:#5E5A50;line-height:1.7}
   .recdet .k{color:#9A9488;margin-right:5px}
@@ -318,11 +323,19 @@
   .recfold{border:0;background:#F2EFE6;border-radius:7px;font-family:inherit;font-size:11px;
     color:#6B665B;padding:2px 7px;margin-left:7px;cursor:pointer}
   .recmain .mt{font-size:11px;color:#9A9488;margin-top:2px;line-height:1.4}
-  .recbtn{flex:0 0 auto;display:flex;align-items:center;gap:5px}
-  .recbtn button{border:0;border-radius:8px;padding:6px 8px;font-family:inherit;font-size:11.5px;
+  /* 这道菜归哪一格：决定「试一试」会换掉今天哪一道，比菜系更该写在最前面 */
+  .reccat{display:inline-block;font-size:10px;line-height:1.6;padding:0 4px;border-radius:5px;
+    margin-right:5px;vertical-align:1.5px;font-weight:500;letter-spacing:.2px}
+  .reccat.protein{background:#E9F1EA;color:#2F5D46}
+  .reccat.fiber{background:#EFF2E3;color:#5A6B33}
+  .reccat.carb{background:#F7EFE1;color:#8A6A32}
+  .recbtn{flex:0 0 auto;display:flex;align-items:center;gap:4px}
+  .recbtn button{border:0;border-radius:8px;padding:6px 7px;font-family:inherit;font-size:11.5px;
     cursor:pointer;background:#F2EFE6;color:#5C574C;line-height:1.2}
   .recbtn button:active{background:#EBE6DA}
   .recbtn button[data-act="recTry"]{background:#E9F1EA;color:#2F5D46;font-weight:550}
+  /* 已经排进今天了：别看起来还能再点一次 */
+  .recbtn button.rcdone{background:#F2EFE6;color:#9A9488;font-weight:400}
   .recbtn .recx{background:none;color:#C0B9AC;font-size:10px;padding:6px 1px}
 
   .rc{padding:12px 0;border-bottom:1px solid #F1EDE4}
@@ -498,7 +511,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-27 09:43';
+var BUILD = '2026-11-27 17:47';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -1021,7 +1034,9 @@ function parseRecipeText(raw){
    ============================================================ */
 var VESSEL_OPTS = [['pan','炒锅'],['water','水锅'],['steamer','蒸屉'],['microwave','微波'],
                    ['airfryer','空气炸锅'],['pre','现成'],['none','不用锅']];
-var CUISINE_OPTS = ['中式','西式','泰式','通用'];
+/* 菜系口径：要么是国家/地区（中日韩泰墨），要么是明确的风格（地中海/轻食）。
+   以前只有四个值，灵感数据里却写着日式、轻食、韩式，编辑器一打开就对不上 */
+var CUISINE_OPTS = ['中式','西式','日式','韩式','泰式','墨西哥','中东','地中海','轻食','通用'];
 var LV_OPTS = ['L1','L2','L3','—'];
 
 /* ---- 原菜谱链接 ----
@@ -2820,43 +2835,100 @@ function recNeedIds(rec){
   });
   return out;
 }
-/* 一道推荐菜 → 这边的菜谱草稿。时间、火、锅都按做法推，实在推不准也就是个默认值，
-   反正落库后能改 */
+/* 一道推荐菜 → 这边的菜谱草稿：时间、火、锅都按做法推，实在推不准也就是个默认值，
+   反正落库后能改。
+   不过只要推荐数据里写了 cat / hand / wall / fire / vessel / staple / ids / taste，
+   就一律以写的为准——猜出来的东西能跑，但落进菜谱库就成了错的分类和错的时间，
+   到时候还得自己一道一道改。 */
+var CAT_LABEL = { protein:'蛋白', fiber:'纤维', carb:'碳水' };
+
+/* 归到哪一格：显式写了就用它。没写的才按用料猜——猜只能救急，
+   一道带芝士的吐司会被认成蛋白，所以能用写的就别用猜的 */
+function recCatOf(rec){
+  if(rec && CAT_LABEL[rec.cat]) return rec.cat;
+  var s = (rec && rec.needs || []).join(' ');
+  var cnt = function(re){ var m = s.match(re); return m ? m.length : 0; };
+  var p = cnt(/鸡蛋|鸡胸|鸡腿|鸡肉|牛肉|猪肉|羊肉|虾|鱼|豆腐|芝士|火腿|金枪鱼|培根|毛豆|酸奶|牛奶|蛋/g);
+  var c = cnt(/吐司|面包|燕麦|米饭|饭团|面条|意面|荞麦|贝果|馒头|藜麦|卷饼|土豆|红薯|玉米|面皮/g);
+  var f = cnt(/西兰花|菠菜|生菜|番茄|黄瓜|彩椒|蘑菇|香菇|胡萝卜|南瓜|茄子|油菜|空心菜|木耳|金针菇|蔬菜|沙拉/g);
+  if(c && c >= p && c >= f) return 'carb';
+  if(f > p) return 'fiber';
+  return 'protein';
+}
+
+function knownIng(id){ return !!(id && (ING[id] || (state.ings && state.ings[id]))); }
+
 function recToDraft(rec){
-  var needs = recNeedIds(rec);
-  var s = (rec.needs || []).join(' ');
-  var cat = /鸡蛋|蛋|鸡胸|鸡腿|牛肉|猪肉|羊肉|虾|鱼|豆腐|酸奶|牛奶|芝士|火腿|金枪鱼|培根|毛豆|蛋白粉/.test(s) ? 'protein'
-          : /吐司|面包|燕麦|米|红薯|玉米|面条|荞麦|贝果|馒头|藜麦|卷饼|土豆|面皮/.test(s) ? 'carb'
-          : 'fiber';
-  var fire = rec.method === '煎' ? 'watch'
+  var ids = (rec.ids && rec.ids.length)
+    ? rec.ids.filter(knownIng)
+    : [];
+  var needs = ids.length ? ids.slice() : recNeedIds(rec);
+  var cat = recCatOf(rec);
+  var fire = rec.fire || (rec.method === '煎' ? 'watch'
            : (rec.method === '微波' || rec.method === '免煮' || rec.method === '搅拌') ? 'off'
-           : 'none';
-  var vessel = rec.method === '煎' ? 'pan'
+           : 'none');
+  var vessel = rec.vessel || (rec.method === '煎' ? 'pan'
              : rec.method === '煮' ? 'water'
              : rec.method === '蒸' ? 'steamer'
              : rec.method === '微波' ? 'microwave'
-             : rec.method === '烤' ? 'airfryer' : 'none';
+             : rec.method === '烤' ? 'airfryer' : 'none');
   var cook = Math.max(1, Number(rec.cook) || 5);
+  var hand = Number(rec.hand) || cook;
+  var wall = Number(rec.wall) || hand;
+  var staple = knownIng(rec.staple) ? rec.staple : (needs[0] || '');
   var lines = [];
-  if((rec.prep || []).length) lines.push('前一晚：' + rec.prep.join('；'));
+  /* 早餐才是「前一晚」；一道晚上现做的菜写成前一晚，落库后看着就是错的 */
+  if((rec.prep || []).length) lines.push((rec.prepLabel || '前一晚') + '：' + rec.prep.join('；'));
   (rec.steps || []).forEach(function(x, i){ lines.push((i + 1) + '. ' + x); });
+  /* 出处只写「就是这一版」的：参考版写进菜谱库，等于给以后翻菜谱的自己一个错链接 */
+  var f = (rec.ref && typeof rec.ref === 'object') ? rec.ref : {};
+  var exact = f.match === 'exact';
   return {
-    n: rec.n, cat: cat, hand: cook, wall: cook, fire: fire, vessel: vessel,
-    staple: needs[0] || '', needs: needs, taste: [0, 0, 0],
-    cuisine: rec.cuisine || '中式', lv: 'L1', m: lines.join('\n'), prep: [],
+    n: rec.n, cat: cat, hand: hand, wall: wall, fire: fire, vessel: vessel,
+    staple: staple, needs: needs,
+    taste: (Array.isArray(rec.taste) && rec.taste.length === 3) ? rec.taste.slice() : [0, 0, 0],
+    cuisine: rec.cuisine || '中式', lv: rec.lv || 'L1',
+    m: lines.join('\n'), prep: [],
     key: 'rc:' + rec.id,
+    src: exact ? String(f.url || '') : '',
+    author: exact ? String(f.author || '') : '',
     note: (rec.tags || []).join(' · ')
   };
 }
 
-/* 试一试：只加进今天，不动菜谱库 */
+/* 这道是不是已经在今天这顿了（「试一试」放进来的 id 是 rc_ 开头） */
+function recInToday(id){
+  var pk = state.today && state.today.pick;
+  if(!pk || !pk.combo) return false;
+  var want = 'rc_' + id;
+  return slotsOf(pk.combo).some(function(x){ return x && x.id === want; });
+}
+
+/* 试一试：换掉今天同类的那一格。
+   原来是「额外加一道」，所以点了之后原来推荐的那道还在，一餐变成四道菜——
+   想吃这道，本来就是想让它顶掉今天那格，加菜另有菜谱页的「＋」。
+   只进今天、不进菜谱库；真要留下再点「收进菜谱」 */
 function recTry(id){
   var rec = recById(id);
   if(!rec) return;
-  if(!state.today.pick){ toast('今天这顿还没排出来，先去加几道菜'); return; }
+  var pick = state.today.pick;
+  if(!pick){ toast('今天这顿还没排出来，先去加几道菜'); return; }
   var d = recToDraft(rec);
   d.id = 'rc_' + id;
-  addExtra(d);
+  /* 只看三格：早先版本把它当「多加的一道」放进了 extra，那种要顺手换成正式一格 */
+  var inSlot = ['protein','fiber','carb'].some(function(k){
+    return pick.combo[k] && pick.combo[k].id === d.id;
+  });
+  if(inSlot){ toast('这道已经在今天这顿了'); return; }
+  var cat = d.cat;
+  var c = {protein:pick.combo.protein, fiber:pick.combo.fiber, carb:pick.combo.carb,
+           extra:(pick.combo.extra || []).filter(function(x){ return x.id !== d.id; })};
+  c[cat] = d;
+  var ev = evaluate(c, todayStr(), {force:true});
+  if(ev.ok){ applyPick(c, ev, 0, cat); return; }
+  /* 撞规矩不拦，先问一句——跟「换一道」走同一条路 */
+  ui.clash = {combo:c, ev:ev, cat:cat, name:d.n};
+  ui.sheetType = 'clash'; ui.sheet = true; renderSheet();
 }
 /* 收进菜谱：落库，以后再装包也不会被覆盖 */
 function recKeep(id){
@@ -2934,11 +3006,13 @@ function viewRecsHtml(){
   var h = '<div class="card recs"><div class="card-h"><b>今日灵感</b><span>' +
           (at ? at + ' · ' : '') + all.length + ' 道' +
           '<button class="recfold" data-act="recsClose">收起</button></span></div>';
-  h += '<div class="hint" style="margin:-4px 0 4px">每天 6:30 加一道 · 点菜名看做法 · 试一试只进今天</div>';
+  h += '<div class="hint" style="margin:-4px 0 4px">每天 6:30 加一道 · 点菜名看做法 · 试一试换掉今天同类那道</div>';
   got.forEach(function(r){
     /* 「新灵感」这条对每道都成立，摆在每一行上等于没说 */
     var tags = (r.tags || []).filter(function(t){ return t && t !== '新灵感'; }).slice(0, 2);
     var meta = [(r.cook ? r.cook + '′' : ''), r.method, r.cuisine, tags.join('/')].filter(Boolean).join(' · ');
+    var catK = recCatOf(r);
+    var inToday = recInToday(r.id);
     var open = ui.recInfo === r.id;
     var full = ui.recFull === r.id;
     var needs = (r.needs || []).join('、');
@@ -2949,19 +3023,25 @@ function viewRecsHtml(){
     var steps = (full ? allSteps : allSteps.slice(0, 2))
                 .map(function(x, i){ return (i + 1) + '. ' + x; }).join('\n');
     h += '<div class="recitem"><div class="recrow"><div class="recmain">' +
-         '<button class="recname" data-act="recInfo" data-id="' + esc(r.id) + '">' + esc(r.n) + '</button>' +
+         '<div class="recnm"><span class="reccat ' + catK + '">' + CAT_LABEL[catK] + '</span>' +
+         '<button class="recname" data-act="recInfo" data-id="' + esc(r.id) + '">' + esc(r.n) + '</button></div>' +
          '<div class="mt">' + esc(meta) + '</div></div>' +
          '<div class="recbtn">' +
-         '<button data-act="recTry" data-id="' + esc(r.id) + '">试一试</button>' +
+         '<button data-act="recTry" data-id="' + esc(r.id) + '"' + (inToday ? ' class="rcdone"' : '') + '>' +
+         (inToday ? '已在今天' : '试一试') + '</button>' +
          '<button data-act="recKeep" data-id="' + esc(r.id) + '">收进菜谱</button>' +
          '<button class="recx" data-act="recSkip" data-id="' + esc(r.id) + '" title="不看了">✕</button>' +
          '</div></div>' + recWhyHtml(r);
     if(open){
+      /* 早餐写「前一晚」，现做的菜要写「下锅前」——固定写死前一晚，落库后看着就是错的 */
+      var pl = r.prepLabel || '前一晚';
+      var prepTxt = prep.join('；');
+      if(prep.length && pl !== '前一晚' && prepTxt.indexOf(pl) !== 0) prepTxt = pl + '：' + prepTxt;
       h += '<div class="recdet">' +
            (needs ? '<div><span class="k">用料</span>' + esc(needs) + '</div>' : '') +
            (prep.length
-             ? (full ? '<div><span class="k">提前</span>' + esc(prep.join('；')) + '</div>'
-                     : '<div><span class="k">提前</span>前一晚要先做 ' + prep.length + ' 件事</div>')
+             ? (full ? '<div><span class="k">提前</span>' + esc(prepTxt) + '</div>'
+                     : '<div><span class="k">提前</span>' + esc(pl + '要先做 ' + prep.length + ' 件事') + '</div>')
              : '') +
            (steps ? '<div class="steps"><span class="k">做法</span>\n' + esc(steps) + '</div>' : '') +
            (!needs && !prep.length && !allSteps.length ? '<div>这道只有名字，还没拿到用料和做法。</div>' : '') +
@@ -5945,15 +6025,57 @@ if(location.search.indexOf('test') >= 0){
            d.m.indexOf('前一晚') === 0 &&
            d.cat === 'protein' && d.fire === 'none' && d.vessel === 'steamer';
   })());
-  chk('灵感：试一试 只进今天这顿，不动菜谱库', (function(){
+  chk('灵感：试一试 换掉今天同类那格，不是再多加一道', (function(){
     state.settings.window = 60;
     ensurePick();
     var before = state.recipes.length;
+    var pick0 = state.today.pick.combo;
     var rec = state.recs.list[1];
+    var want = 'rc_' + rec.id;
+    var cat = recToDraft(rec).cat;
+    var oldId = pick0[cat] && pick0[cat].id;
+    var nExtra = (pick0.extra || []).length;
     recTry(rec.id);
-    var inToday = (state.today.pick.combo.extra || []).some(function(x){ return x && x.id === 'rc_' + rec.id; });
+    /* 撞规矩会先问一句，跟「换一道」一样。测试里就当用户点了「就这样」 */
+    if(ui.clash) clashConfirm();
+    var c = state.today.pick.combo;
+    var ok = !!c[cat] && c[cat].id === want &&
+             oldId !== want &&
+             (c.extra || []).length === nExtra &&
+             slotsOf(c).filter(function(x){ return x && x.id === want; }).length === 1 &&
+             state.recipes.length === before;
     state.settings.window = 15;
-    return inToday && state.recipes.length === before;
+    return ok;
+  })());
+  chk('灵感：同一道试第二次不会重复进今天', (function(){
+    var rec = state.recs.list[1];
+    var before = state.today.pick.combo;
+    recTry(rec.id);
+    var same = slotsOf(state.today.pick.combo).filter(function(x){ return x && x.id === 'rc_' + rec.id; }).length;
+    return same === 1 && state.today.pick.combo === before;
+  })());
+  chk('灵感：写死的 cat / 时间 / 火 / 锅 / 出处，原样落进菜谱草稿', (function(){
+    var d = recToDraft({ id:'m01', n:'茄汁鸡蛋豆腐', cook:18, method:'煎', cuisine:'中式',
+      cat:'protein', hand:16, wall:20, fire:'watch', vessel:'pan', staple:'tofuFirm',
+      taste:[1,1,0], ids:['tofuFirm','egg','tomato'], prepLabel:'下锅前',
+      needs:['老豆腐','鸡蛋','西红柿'], prep:['豆腐切块压水'], steps:['煎豆腐','裹茄汁'],
+      ref:{ plat:'下厨房', author:'青迟的猫', url:'https://www.xiachufang.com/recipe/106180414/',
+            match:'exact' } });
+    return d.cat === 'protein' && d.hand === 16 && d.wall === 20 && d.fire === 'watch' &&
+           d.vessel === 'pan' && d.staple === 'tofuFirm' && d.taste[1] === 1 &&
+           d.needs.join(',') === 'tofuFirm,egg,tomato' &&
+           d.m.indexOf('下锅前：') === 0 &&
+           d.src.indexOf('106180414') > 0 && d.author === '青迟的猫';
+  })());
+  chk('灵感：只是参考版就不往菜谱里写来源，免得以后点开是别人那版', (function(){
+    var d = recToDraft({ id:'zz', n:'某道菜', cook:10, method:'煎', needs:['鸡蛋'], prep:[], steps:['一'],
+      ref:{ plat:'下厨房', author:'某人', url:'https://www.xiachufang.com/recipe/1/', match:'similar' } });
+    return d.src === '' && d.author === '';
+  })());
+  chk('灵感：没有写 cat 的，按用料猜也不会把吐司认成蛋白', (function(){
+    return recCatOf({ needs:['吐司','鸡蛋','黄油'] }) === 'carb' &&
+           recCatOf({ needs:['鸡胸','西兰花'] }) === 'protein' &&
+           recCatOf({ needs:['生菜','黄瓜','番茄'] }) === 'fiber';
   })());
   chk('灵感：收进菜谱 真落库，并从灵感块里消失', (function(){
     var before = state.recipes.length;
