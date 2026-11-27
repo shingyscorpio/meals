@@ -287,6 +287,15 @@
   .recstrip .rstxt{flex:1;min-width:0;font-size:12.5px;color:#8A8478;white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis}
   .recstrip .rstxt b{color:#3B372F;font-weight:550}
+  /* 菜谱包有新版：比灵感条更轻，一句话 + 一个 ✕，装完就消失 */
+  .updbar{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+    border:1px solid #DCE6DA;background:#F3F7F1;border-radius:11px;padding:9px 11px;margin:0 0 10px;
+    font-family:inherit;color:#2F5D46;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .updbar:active{background:#EAF2E7}
+  .updbar .ubt{flex:0 0 auto;font-size:12.5px;font-weight:560}
+  .updbar .ubs{flex:1;min-width:0;font-size:11.5px;color:#6E8A76;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .updbar .ubx{flex:0 0 auto;font-size:12px;color:#9AA694;padding:0 2px}
   .recstrip .rsmore{flex:0 0 auto;font-size:11.5px;color:#3C6B4F}
   .card.recs{background:#FBFAF5}
   .recitem{padding:9px 0;border-bottom:1px dashed #F0ECE3}
@@ -489,7 +498,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-27 08:46';
+var BUILD = '2026-11-27 09:43';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -542,6 +551,10 @@ state.extraIng = state.extraIng || {};
 /* 常备品：自己加进去的、以及被自己移出的出厂项。老数据没有这两个字段 */
 state.pantry = state.pantry || [];
 state.notPantry = state.notPantry || [];
+/* 菜谱包指纹：本机装的是哪一版。装包成功后记下，下次开 app 拿它跟仓库里比，
+   不一样才提示「有更新」。packSigSkip 是你点了 ✕ 的那一版，不再唠叨同一件事 */
+state.packSig = state.packSig || '';
+state.packSigSkip = state.packSigSkip || '';
 /* 老数据的自定义食材、旧分类名要搬进新结构（幂等，重复跑没事）。
    但**不能在这里跑**：matchIng → isSeasoning 要读 SEASON_WORDS / ING_ALIAS，
    而那几个词表是 var，此刻还没赋值（undefined.some 直接抛错，整个脚本中途死掉，
@@ -2429,6 +2442,7 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false, paName:'',
+           packVer:null, packUpd:null, packBusy:0,
            gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null,
            catOpen:null, gMove:null, recsAll:false, recsOpen:false, recInfo:'', recFull:'' };
 (function(){
@@ -2716,6 +2730,67 @@ function loadRecs(force){
       if(ui.tab === 'lib' && !libQ()) renderKeep();
     })
     .catch(function(){});
+}
+
+/* ============================================================
+   菜谱包有没有新版
+   灵感清单可以整份替换，菜谱库不行——它是你的数据，装包是一次带规则的合并。
+   所以这里不自动装，只查一个几百字节的版本号：不一样就在菜谱页顶部提示一句，
+   你点一下才真的装。没有更新就完全不出现。
+   ============================================================ */
+/* 算法必须和根目录 packver.js 里的 sigOf() 一字不差，两边算同一份数据得到同一个串 */
+function packSigOf(list){
+  var s = (list || []).map(function(r){
+    return [r.key || '', r.n || '', Number(r.v) || 0, r.m ? String(r.m).length : 0].join('~');
+  }).join('|');
+  var h = 2166136261, i;
+  for(i = 0; i < s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return ('0000000' + h.toString(16)).slice(-8) + '-' + (list || []).length;
+}
+
+/* 该不该提示，只看三样：仓库里有指纹、它不是本机这版、你也没按过 ✕ */
+function packUpdOf(d){
+  if(!d || !d.sig) return null;
+  if(d.sig === state.packSig || d.sig === state.packSigSkip) return null;
+  return d;
+}
+
+function checkPack(force){
+  if(typeof fetch !== 'function') return;
+  var last = Number(state.packChk || 0);
+  if(!force && Date.now() - last < 20 * 60 * 1000) return;
+  state.packChk = Date.now();
+  fetch('./pack-ver.json?d=' + todayStr(), { cache:'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if(!d || !d.sig) return;
+      ui.packVer = d;
+      var was = ui.packUpd;
+      ui.packUpd = packUpdOf(d);
+      /* 只有结论变了才重画，别每次开 app 都闪一下 */
+      if(!!was !== !!ui.packUpd && ui.tab === 'lib' && !libQ()) renderKeep();
+    })
+    .catch(function(){});
+}
+
+/* 点了提示条：取包、合并、把结果用一句话告诉你，不去开设置面板 */
+function installPackQuiet(){
+  if(ui.packBusy) return;
+  ui.packBusy = 1;
+  toast('正在装菜谱包…');
+  loadPack('./seed-recipes.json', '菜谱包', true);
+}
+
+function packUpdHtml(){
+  var d = ui.packUpd;
+  if(!d) return '';
+  return '<button class="updbar" data-act="packUpd">' +
+         '<span class="ubt">菜谱库有更新</span>' +
+         '<span class="ubs">' + (d.n ? '包里 ' + d.n + ' 道' : '') + ' · 点这里装</span>' +
+         '<span class="ubx" data-act="packUpdX" title="先不装">✕</span></button>';
 }
 
 /* 早餐库的食材名 → 这边的食材 id。对不上就登记一条新食材，
@@ -3197,6 +3272,8 @@ function viewLib(){
          '<button class="btn btn-ghost" data-act="adddone" style="font-size:12.5px;padding:6px 12px">回到今天</button>' +
          '</div></div>';
   }
+  /* 菜谱包有新版的提示：压在整页最上面，装完就消失。搜索时不出现，别挡着结果 */
+  if(!q) h += packUpdHtml();
   h += '<div class="sbar"><div class="sbw">' +
        '<span class="si">🔍</span>' +
        '<input id="libQ" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" ' +
@@ -3555,28 +3632,57 @@ function getJSON(url, ok, err){
 
 /* 在应用内部装包。不依赖外部页面写存储——桌面图标和浏览器可能是两套，
    谁打开的就在谁那儿装 */
-function loadPack(url, label){
-  ui.setMsg = '正在取' + label + '…';
-  renderSheet();
+function loadPack(url, label, quiet){
+  if(!quiet){
+    ui.setMsg = '正在取' + label + '…';
+    renderSheet();
+  }
   getJSON(url, function(o){
     var list = (o && o.data && o.data.recipes) || (Array.isArray(o) ? o : []);
     if(!list.length){
+      if(quiet){ ui.packBusy = 0; toast('这个包里没有菜谱，什么都没改'); return; }
       ui.setMsg = '这个包里没有菜谱，什么都没改。';
       renderSheet(); return;
     }
     var r = mergePack(list);
-    var bits = [];
-    if(r.added) bits.push('新增 <b>' + r.added + '</b> 道（' + r.names.join('、') + '）');
-    if(r.upd) bits.push('更新 <b>' + r.upd + '</b> 道做法（' + r.updNames.join('、') + '）');
+    /* 装完就把这一版的指纹记下来：以后开 app 拿它跟仓库比，一样就不再提示。
+       提示条点进来的（quiet）也走这里，所以两条入口不会各记各的 */
+    state.packSig = packSigOf(list);
+    state.packSigSkip = '';
+    ui.packUpd = null;
+    save();
+    var bits = [], plainBits = [];
+    if(r.added){ bits.push('新增 <b>' + r.added + '</b> 道（' + r.names.join('、') + '）');
+                 plainBits.push('新增 ' + r.added + ' 道（' + r.names.join('、') + '）'); }
+    if(r.upd){ bits.push('更新 <b>' + r.upd + '</b> 道做法（' + r.updNames.join('、') + '）');
+               plainBits.push('更新 ' + r.upd + ' 道做法（' + r.updNames.join('、') + '）'); }
     if(!r.added && !r.upd){
+      if(quiet){
+        ui.packBusy = 0;
+        toast('已经是最新的：' + r.dup + ' 道都有了，一共 ' + r.total + ' 道');
+        if(ui.tab === 'lib') renderKeep(); else render();
+        return;
+      }
       ui.setMsg = '没有新的：包里 ' + r.dup + ' 道你都已经有了。现在一共 ' + r.total + ' 道。';
-    } else {
-      ui.setMsg = '装好了：' + bits.join('，') +
-                  (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
-                  '。现在一共 ' + r.total + ' 道。';
+      renderSheet(); return;
     }
+    if(quiet){
+      ui.packBusy = 0;
+      toast('装好了：' + plainBits.join('，') + (r.dup ? '，跳过 ' + r.dup + ' 道' : '') + '，一共 ' + r.total + ' 道');
+      /* 分类计数、列表都要跟着变；停在菜谱页就就地刷新，别把人弹回顶部 */
+      if(ui.tab === 'lib') renderKeep(); else render();
+      return;
+    }
+    ui.setMsg = '装好了：' + bits.join('，') +
+                (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
+                '。现在一共 ' + r.total + ' 道。';
     renderSheet();
   }, function(e){
+    if(quiet){
+      ui.packBusy = 0;
+      toast('没取到菜谱包，检查网络后点一下提示条再试');
+      return;
+    }
     ui.setMsg = '取不到菜谱包（' + (e && e.message ? e.message : '未知原因') + '）。检查网络后再点一次。';
     renderSheet();
   });
@@ -4458,6 +4564,13 @@ document.addEventListener('click', function(e){
   /* 设置 */
   else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; ui.setMsg = ''; renderSheet(); }
   else if(act === 'seedAdd'){ loadPack('./seed-recipes.json', '菜谱包'); }
+  /* 提示条：点条子装包，点 ✕ 表示这一版先不装（换下一版会重新出现） */
+  else if(act === 'packUpd'){ installPackQuiet(); }
+  else if(act === 'packUpdX'){
+    if(ui.packUpd && ui.packUpd.sig) state.packSigSkip = ui.packUpd.sig;
+    ui.packUpd = null;
+    save(); renderKeep();
+  }
   else if(act === 'bkOpen'){ ui.sheet = true; ui.bkText = backupText(); ui.bkMsg = null; ui.sheetType = 'backup'; renderSheet(); }
   else if(act === 'bkDownload'){ downloadBackup(); }
   else if(act === 'bkCopy'){ copyBackup(); }
@@ -5888,6 +6001,59 @@ if(location.search.indexOf('test') >= 0){
     state.recs = keepList; state.recDone = keepDone;
     return n === 2;
   })());
+
+  /* ---------- 菜谱包有没有新版：只提示，不自动装 ---------- */
+  chk('菜谱包：指纹算法跟 packver.js 一字不差', (function(){
+    /* 这个 8 位串是 node packver.js 里同一份数据算出来的，两边必须相同，
+       否则手机上会永远显示「有更新」或者永远不提示 */
+    return packSigOf([{key:'a',n:'甲',v:1,m:'x'},{key:'b',n:'乙',v:2,m:'yy'}]) === 'b42c3067-2';
+  })());
+  chk('菜谱包：改了做法（哪怕没动版本号）指纹就会变', (function(){
+    return packSigOf([{key:'a',n:'甲',v:1,m:'x'}]) !== packSigOf([{key:'a',n:'甲',v:1,m:'xy'}]);
+  })());
+  chk('菜谱包：本机就是这版、或者按过 ✕，都不提示', (function(){
+    var kSig = state.packSig, kSkip = state.packSigSkip;
+    var ver = { sig:'SIG-1', n:53 };
+    state.packSig = ''; state.packSigSkip = '';
+    var fresh = !!packUpdOf(ver);
+    state.packSig = 'SIG-1';
+    var same = packUpdOf(ver);
+    state.packSig = 'SIG-0'; state.packSigSkip = 'SIG-1';
+    var skipped = packUpdOf(ver);
+    state.packSig = kSig; state.packSigSkip = kSkip;
+    return fresh && same === null && skipped === null && packUpdOf(null) === null;
+  })());
+  chk('菜谱包：有新版时菜谱页顶部出现提示，点 ✕ 后消失', (function(){
+    var kUpd = ui.packUpd, kSig = state.packSig, kSkip = state.packSigSkip, kQ = ui.libQ, kTab = ui.tab;
+    ui.tab = 'lib'; ui.libQ = ''; state.packSig = ''; state.packSigSkip = '';
+    ui.packUpd = { sig:'SIG-9', n:53 };
+    var h = viewLib();
+    var shown = h.indexOf('updbar') >= 0 && h.indexOf('菜谱库有更新') >= 0 && h.indexOf('包里 53 道') >= 0;
+    /* 搜索时不该挡着结果 */
+    ui.libQ = '豆腐';
+    var inSearch = viewLib().indexOf('updbar') < 0;
+    ui.libQ = '';
+    /* 点 ✕：这一版不再出现，换成下一版还会来 */
+    state.packSigSkip = 'SIG-9';
+    var afterX = packUpdOf({ sig:'SIG-9', n:53 });
+    var nextVer = !!packUpdOf({ sig:'SIG-10', n:54 });
+    ui.packUpd = kUpd; state.packSig = kSig; state.packSigSkip = kSkip; ui.libQ = kQ; ui.tab = kTab;
+    return shown && inSearch && afterX === null && nextVer;
+  })());
+  chk('菜谱包：pack-ver.json 的指纹跟菜谱包本身对得上', (function(){
+    /* 端到端的一条：手机上算出来的指纹必须等于我推上去的那个，
+       否则要么永远提示有更新、要么永远不提示 */
+    try{
+      var a = new XMLHttpRequest();
+      a.open('GET', './pack-ver.json', false); a.send(null);
+      var ver = JSON.parse(a.responseText);
+      var b = new XMLHttpRequest();
+      b.open('GET', './seed-recipes.json', false); b.send(null);
+      var o = JSON.parse(b.responseText);
+      var list = (o && o.data && o.data.recipes) || [];
+      return !!ver.sig && ver.sig === packSigOf(list) && ver.n === list.length;
+    }catch(e){ return false; }
+  })());
   chk('灵感：收进来的菜带 my 标记，装包不会冲掉', (function(){
     var hit = state.recipes.filter(function(x){ return String(x.key || '').indexOf('rc:') === 0; })[0];
     return !!hit && hit.my === 1;
@@ -6755,10 +6921,14 @@ render();
    不能因为一个请求把「今天吃什么」挡在门外 */
 if(location.search.indexOf('test') < 0){
   loadRecs();
+  /* 顺带问一句菜谱包有没有新版：只取几百字节的 pack-ver.json，
+     有更新才在菜谱页顶部提示，不自动装 */
+  checkPack();
   /* 早上把 app 挂在后台、再切回来时顺手再问一次，不用手动刷新也能看到新菜。
-     loadRecs 自己会挡：今天已经取到就直接返回，不会多发请求 */
+     两个函数自己都会挡：今天已经取到 / 20 分钟内问过，就直接返回 */
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible') loadRecs();
+    if(document.visibilityState !== 'visible') return;
+    loadRecs(); checkPack();
   });
 }
 
