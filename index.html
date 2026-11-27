@@ -489,7 +489,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-27 08:41';
+var BUILD = '2026-11-27 08:46';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2698,8 +2698,12 @@ function loadRecs(force){
   var now = todayStr();
   var last = Number(state.recFetched || 0);
   if(!force){
+    /* 今天已经取到了就不再问网络 */
     if(state.recs && state.recs.at === now) return;
-    if(Date.now() - last < 30 * 60 * 1000) return;
+    /* 还没取到今天的，最多 5 分钟问一次。
+       原来这里挡 30 分钟：6:28 顺手开过一次 app，6:31 新菜推上来也看不到，
+       非得等半小时后再开一次，看起来就像「新菜没推成功」 */
+    if(Date.now() - last < 5 * 60 * 1000) return;
   }
   state.recFetched = Date.now();
   fetch('./recs.json?d=' + now, { cache:'no-store' })
@@ -6749,7 +6753,14 @@ render();
 
 /* 先出首屏，再去取当天的灵感清单：取不到（没网 / 还没生成）就当没有，
    不能因为一个请求把「今天吃什么」挡在门外 */
-if(location.search.indexOf('test') < 0) loadRecs();
+if(location.search.indexOf('test') < 0){
+  loadRecs();
+  /* 早上把 app 挂在后台、再切回来时顺手再问一次，不用手动刷新也能看到新菜。
+     loadRecs 自己会挡：今天已经取到就直接返回，不会多发请求 */
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') loadRecs();
+  });
+}
 
 /* ?new=1 直接打开「加一道菜」，方便在电脑上看版式；?edit=1 打开改菜谱 */
 if(location.search.indexOf('edit=1') >= 0){
