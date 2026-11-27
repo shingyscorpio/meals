@@ -489,7 +489,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-26 22:33';
+var BUILD = '2026-11-27 08:41';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2674,13 +2674,17 @@ function render(){
    两个出口分得很清楚：「试一试」只塞进今天这顿、不进库；
    「收进菜谱」才真正落进菜谱，从此参与推荐。
    ============================================================ */
-var REC_KEEP = 3;
+var REC_KEEP = 3;    /* 收起状态先露几道 */
+var REC_SHOW = 12;   /* 这个模块一次最多放几道。删掉一道就从后备补一道，
+                        所以点 ✕ 不会把可看的数量越删越少 */
 
-/* 还没处理过的：收进菜谱、或者点过「不看了」的就不再出现 */
+/* 还没处理过的：收进菜谱、或者点过「不看了」的就不再出现。
+   清单是全量带下来的（gen-recs.js 导全部灵感菜），这里才截到 12 道——
+   只按 12 道导出的话，删掉的两道会一直占着名额，明天加了新菜还是 12-2。 */
 function recAll(){
   return ((state.recs && state.recs.list) || []).filter(function(r){
     return r && r.id && r.n && !state.recDone['r:' + r.id];
-  });
+  }).slice(0, REC_SHOW);
 }
 function recById(id){
   var l = (state.recs && state.recs.list) || [];
@@ -5846,6 +5850,39 @@ if(location.search.indexOf('test') >= 0){
     var rec = state.recs.list[1];
     recSkip(rec.id);
     return viewRecsHtml().indexOf(rec.n) < 0;
+  })());
+  /* 这里是这次的关键：删掉两道不能让可看的数量变少。
+     清单是全量带下来的，12 道只是显示上限，后面的自动补上来 */
+  chk('灵感：✕ 掉两道，后面自动补上，还是 12 道', (function(){
+    var keepList = state.recs, keepDone = state.recDone, keepAll = ui.recsAll;
+    var list = [], i;
+    for(i = 1; i <= 15; i++){
+      list.push({ id:'kx' + i, n:'后备菜' + i, cook:10, method:'煎', cuisine:'中式',
+                  needs:[], prep:[], steps:['一'], tags:[] });
+    }
+    state.recs = { at: todayStr(), list: list };
+    state.recDone = { 'r:kx1':1, 'r:kx2':1 };
+    var all = recAll();
+    ui.recsAll = true;
+    var h = viewRecsHtml();
+    var ok = all.length === REC_SHOW && all[0].id === 'kx3' &&
+             h.indexOf('后备菜3') >= 0 && h.indexOf('后备菜14') >= 0 &&
+             h.indexOf('后备菜15') < 0;   /* 第 12 道之后的留着当后备 */
+    ui.recsAll = keepAll;
+    state.recs = keepList; state.recDone = keepDone;
+    return ok;
+  })());
+  chk('灵感：后备不够 12 道时就显示实际数量', (function(){
+    var keepList = state.recs, keepDone = state.recDone;
+    state.recs = { at: todayStr(), list: [
+      { id:'kx1', n:'甲', cook:10, needs:[], prep:[], steps:['一'], tags:[] },
+      { id:'kx2', n:'乙', cook:10, needs:[], prep:[], steps:['一'], tags:[] },
+      { id:'kx3', n:'丙', cook:10, needs:[], prep:[], steps:['一'], tags:[] }
+    ]};
+    state.recDone = { 'r:kx1':1 };
+    var n = recAll().length;
+    state.recs = keepList; state.recDone = keepDone;
+    return n === 2;
   })());
   chk('灵感：收进来的菜带 my 标记，装包不会冲掉', (function(){
     var hit = state.recipes.filter(function(x){ return String(x.key || '').indexOf('rc:') === 0; })[0];
