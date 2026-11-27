@@ -96,6 +96,12 @@
   /* 打名字时的实时提示：对上已有食材 / 会新建到哪一类 */
   .cushint{font-size:11.5px;color:#8A8478;margin-top:8px;line-height:1.65;min-height:15px}
   .cushint .dim{color:#A9A398}
+  /* 常备品清单：一行一样，右边一个「移出」；不像库存行那样整行可点 */
+  .parow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F1EDE4}
+  .parow:last-child{border-bottom:0}
+  .parow .ib{flex:1;min-width:0}
+  .parow .nm{font-size:14.5px;font-weight:540}
+  .parow .mt{font-size:11.5px;color:#9A9488;margin-top:2px}
   .cuscat{display:flex;align-items:baseline;justify-content:space-between;
     font-size:12px;color:#8A8478;margin:14px 4px 6px}
   .chip.mgr{border-style:dashed;color:#6B665B}
@@ -456,7 +462,11 @@ var SHELF = {
    不会再一股脑堆进「自定义」里找不着。 */
 var DEFAULT_GROUPS = ['叶菜','果菜','菌菇','根茎','肉类','豆制品','水果','其他'];
 
-/* 常备品：不记库存，视为「家里总有」。采购清单和库存打分都不算它。 */
+/* 常备品：不记库存，视为「家里总有」。采购清单和库存打分都不算它。
+   下面是出厂那一批（蛋奶、干货、冷冻成品）。真正生效的清单还要加上你自己
+   在冰箱页「常备品」里补的（state.pantry），减掉你移出的（state.notPantry）。
+   意面、挂面、罐头这类「柜子里常有一包」的东西，与其每次买完记账，
+   不如直接标成常备——这也是这个功能存在的理由。 */
 var PANTRY = ['egg','yogurt','fruit','milk','mixedGrain','oats','bread','mantou','wonton',
               'pancake','chickpea','nuts','chia','woodEar','nori']; 
 
@@ -479,7 +489,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-26 21:10';
+var BUILD = '2026-11-26 22:33';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -529,6 +539,9 @@ state.edits = state.edits || {};
 state.hidden = state.hidden || [];
 state.pending = state.pending || [];
 state.extraIng = state.extraIng || {};
+/* 常备品：自己加进去的、以及被自己移出的出厂项。老数据没有这两个字段 */
+state.pantry = state.pantry || [];
+state.notPantry = state.notPantry || [];
 /* 老数据的自定义食材、旧分类名要搬进新结构（幂等，重复跑没事）。
    但**不能在这里跑**：matchIng → isSeasoning 要读 SEASON_WORDS / ING_ALIAS，
    而那几个词表是 var，此刻还没赋值（undefined.some 直接抛错，整个脚本中途死掉，
@@ -543,6 +556,7 @@ function dataDefaults(){
     recipes: [], edits:{}, hidden:[], extraIng:{}, pending: [],
     shelf:{}, shelfName:{},
     ings:{}, ingG:{}, groups: DEFAULT_GROUPS.slice(),
+    pantry:[], notPantry:[],
     recs: null, recDone: {}, recFetched: 0,
     today: { date:'', skipped:[], locks:{}, pick:null, eaten:null, consumed:null }
   };
@@ -1220,7 +1234,7 @@ function arow(label, act, opts, cur){
 }
 
 function allIngIds(){
-  var out = Object.keys(SHELF).concat(PANTRY);
+  var out = Object.keys(SHELF).concat(pantryList());
   function put(k){ if(out.indexOf(k) < 0) out.push(k); }
   Object.keys(ING).forEach(put);
   Object.keys(state.ings || {}).forEach(put);
@@ -1906,7 +1920,19 @@ function findItem(id){ return ITEMS.filter(function(x){ return x.id === id; })[0
 /* 库存口径：qty>0 且未过期才算「有」。过期的不参与推荐，在冰箱页单独提示。
    常备品（PANTRY）不进库存表，视为家里总有，所以 invOf 对它返回 null，
    但 stockedOf 才是「要不要买」的唯一口径。 */
-function isPantry(id){ return PANTRY.indexOf(id) >= 0; }
+/* 生效的常备品清单：出厂那批 − 你移出的 + 你自己加的，顺序按加入先后。
+   每次现算，不做缓存——清单最多几十项，比起「改了没生效」的坑，这点开销不算什么 */
+function pantryList(){
+  var off = state.notPantry || [];
+  var out = PANTRY.filter(function(id){ return off.indexOf(id) < 0; });
+  (state.pantry || []).forEach(function(id){
+    if(out.indexOf(id) < 0) out.push(id);
+  });
+  return out;
+}
+function isPantry(id){ return pantryList().indexOf(id) >= 0; }
+/* 自己加的那几项（不是出厂自带的），列表里要能认出来 */
+function isMyPantry(id){ return (state.pantry || []).indexOf(id) >= 0; }
 function invOf(id){
   return state.inventory.filter(function(x){
     return x.id === id && x.qty > 0 && daysBetween(todayStr(), x.exp) >= 0;
@@ -2402,7 +2428,7 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            draft:null, impMsg:null, pasteTxt:'', ingQ:'', libQ:'',
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
-           cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false,
+           cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false, paName:'',
            gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null,
            catOpen:null, gMove:null, recsAll:false, recsOpen:false, recInfo:'', recFull:'' };
 (function(){
@@ -3257,11 +3283,14 @@ function viewFridge(){
        '做菜点「就吃这个」会自动扣库存，菜谱写到的食材会算进采购清单。</div>';
 
   /* 常备品不是不存在，只是不跟踪——列出来是为了让你知道「哪些不在这里」 */
-  h += '<div class="card" style="margin-top:14px"><div class="card-h"><b>不记库存的常备品</b><span>' + PANTRY.length + ' 项</span></div>' +
-       '<div class="buywrap">' + PANTRY.map(function(id){
-         return '<span class="buy fixed">' + esc(ingName(id)) + '</span>';
+  var pl = pantryList();
+  h += '<div class="card" style="margin-top:14px"><div class="card-h"><b>不记库存的常备品</b>' +
+       '<button class="linkbtn" data-act="sheetPantry" style="font-size:12px">' + pl.length + ' 项 · 管理 ›</button></div>' +
+       '<div class="buywrap">' + pl.map(function(id){
+         return '<span class="buy fixed"' + (isMyPantry(id) ? ' style="border-style:dashed"' : '') + '>' +
+                esc(ingName(id)) + '</span>';
        }).join('') + '</div>' +
-       '<div style="font-size:11.5px;color:#A9A398;margin-top:9px">这些默认家里有，不进采购清单也不参与库存打分。真用完了就在今天页点「换」。</div>' +
+       '<div style="font-size:11.5px;color:#A9A398;margin-top:9px">这些默认家里有，不进采购清单也不参与库存打分。真用完了就在今天页点「换」。虚线框的是你自己加的。</div>' +
        '</div>';
   return h;
 }
@@ -3347,6 +3376,7 @@ function renderSheet(){
   if(ui.sheetType === 'add') h = sheetAdd();
   else if(ui.sheetType === 'edit') h = sheetEdit();
   else if(ui.sheetType === 'shelf') h = sheetShelf();
+  else if(ui.sheetType === 'pantry') h = sheetPantry();
   else if(ui.sheetType === 'cat') h = sheetCat();
   else if(ui.sheetType === 'recipe') h = sheetRecipe();
   else if(ui.sheetType === 'import') h = sheetImport();
@@ -3391,11 +3421,11 @@ function sheetSettings(){
   h += '</div></div>';
   h += '<div style="margin-top:14px;font-size:12px;color:#A9A398;line-height:1.7">' +
        '窗口会立刻改变候选池：12 分钟会挡掉杭椒牛柳、西葫芦炒番茄这类；20 分钟会把它们放回来。</div>';
-  h += '<div class="setrow" style="margin-top:16px"><span>不记库存的常备品</span><span style="font-size:12.5px;color:#8A8478">' +
-       PANTRY.length + ' 项</span></div>';
+  h += '<div class="setrow" style="margin-top:16px"><span>不记库存的常备品</span>' +
+       '<button class="linkbtn" data-act="sheetPantry" style="font-size:12.5px">' + pantryList().length + ' 项 · 管理</button></div>';
   h += '<div style="font-size:12px;color:#8A8478;line-height:1.8">' +
-       PANTRY.map(function(id){ return esc(ingName(id)); }).join('、') +
-       '<br><span style="color:#A9A398">这些默认家里有，用完手动换菜，不进采购清单。</span></div>';
+       pantryList().map(function(id){ return esc(ingName(id)); }).join('、') +
+       '<br><span style="color:#A9A398">这些默认家里有，用完手动换菜，不进采购清单。想加就点上面的「管理」。</span></div>';
   if(state.hidden.length){
     h += '<div class="setrow" style="margin-top:8px"><span>删掉的菜谱</span>' +
          '<span style="font-size:12.5px;color:#8A8478">' + state.hidden.length + ' 道</span></div>';
@@ -3886,6 +3916,104 @@ function sheetShelf(){
 }
 
 /* ============================================================
+   常备品：自己补、自己移出。
+   「常备」的含义是不跟踪数量——所以加进来的时候要把冰箱里那几行撤掉，
+   否则库存里会躺着一行你看不见、又会被「就吃这个」扣掉的幽灵库存。
+   ============================================================ */
+function pantryHintHtml(name){
+  var t = normIngName(name);
+  if(!t) return '<span class="dim">打名字，比如「意面」「挂面」「玉米罐头」。加进来就算家里总有，不用记账。</span>';
+  var hit = matchIng(t);
+  if(hit && isPantry(hit)) return '「' + esc(ingName(hit)) + '」已经是常备品了，不用再加。';
+  if(hit){
+    var rows = state.inventory.filter(function(x){ return x.id === hit && x.qty > 0; });
+    return '对上库里已有的「' + esc(ingName(hit)) + '」，加进常备品后它就算家里总有。' +
+           (rows.length ? '冰箱里那 ' + rows.length + ' 行会一起撤掉。' : '');
+  }
+  if(isSeasoning(t)) return '「' + esc(t) + '」算调料，调料不用进常备品。';
+  return '新食材「' + esc(t) + '」，会一起建一条；以后菜谱用到它就算有。';
+}
+
+/* 加进常备品。返回 id，失败返回 null */
+function pantryAdd(name){
+  var t = normIngName(name);
+  if(!t){ toast('先打个名字'); return null; }
+  if(t.length > 12){ toast('名字短一点，最多 12 个字'); return null; }
+  var id = matchIng(t);
+  if(!id && isSeasoning(t)){ toast('「' + t + '」算调料，不用进常备品'); return null; }
+  if(!id){
+    id = newIngId();
+    state.ings[id] = { n: t, g: otherGroup(), d: state.shelfName[t] || 3 };
+  }
+  if(isPantry(id)){ toast('「' + ingName(id) + '」已经是常备品了'); return id; }
+  var oi = state.notPantry.indexOf(id);
+  if(oi >= 0) state.notPantry.splice(oi, 1);   /* 出厂自带、被移出过的：放回来 */
+  else state.pantry.push(id);
+  /* 撤掉库存行，见上面那段注释。撤了几份要说清，别让人以为东西凭空没了 */
+  var dead = state.inventory.filter(function(x){ return x.id === id; });
+  var q = dead.reduce(function(a, x){ return a + (Number(x.qty) || 0); }, 0);
+  if(dead.length){
+    state.inventory = state.inventory.filter(function(x){ return x.id !== id; });
+    toast('「' + ingName(id) + '」加进常备品了 · 冰箱里那 ' + q + ' 份撤掉');
+  } else {
+    toast('「' + ingName(id) + '」加进常备品了 · 以后都算家里有');
+  }
+  return id;
+}
+
+/* 移出常备品：之后就按普通生鲜算，没有库存就是缺，会进采购清单 */
+function pantryDel(id){
+  var nm = ingName(id);
+  var i = state.pantry.indexOf(id);
+  if(i >= 0) state.pantry.splice(i, 1);
+  if(PANTRY.indexOf(id) >= 0 && state.notPantry.indexOf(id) < 0) state.notPantry.push(id);
+  save();
+  toast('「' + nm + '」移出常备品 · 以后按生鲜记库存');
+}
+
+/* 恢复出厂：自己加的清掉，移出的补回来 */
+function pantryReset(){
+  state.pantry = [];
+  state.notPantry = [];
+  save();
+}
+
+function sheetPantry(){
+  var pl = pantryList();
+  var mine = pl.filter(isMyPantry);
+  var base = pl.filter(function(id){ return !isMyPantry(id); });
+  var h = '<h3>常备品</h3>';
+  h += '<div style="font-size:12px;color:#8A8478;line-height:1.7;margin:-8px 0 2px">' +
+       '常备品不记库存，视为「家里总有」：不进采购清单，也不参与库存打分。' +
+       '意面、挂面、罐头这种柜子里常有一包的东西放这儿，比每次买完记账省事。</div>';
+  h += '<div class="cuswrap"><input id="paName" type="text" placeholder="打名字，比如「意面」" ' +
+       'autocomplete="off" enterkeyhint="done" value="' + esc(ui.paName || '') + '">' +
+       '<button data-act="pantryAdd">加进</button></div>';
+  h += '<div id="paHint" class="cushint">' + pantryHintHtml(ui.paName) + '</div>';
+
+  if(mine.length){
+    h += '<div class="shgrp">我自己加的 · ' + mine.length + ' 项</div>';
+    mine.forEach(function(id){
+      h += '<div class="parow"><div class="ib"><div class="nm">' + esc(ingName(id)) + '</div>' +
+           '<div class="mt">不记库存 · 菜谱用到它就算有</div></div>' +
+           '<button class="swapbtn mini" data-act="pantryDel" data-id="' + esc(id) + '">移出</button></div>';
+    });
+  }
+  h += '<div class="shgrp">出厂自带 · ' + base.length + ' 项</div>';
+  /* 出厂项不再每行都写一句一样的注释——十五行一模一样的话只会盖住菜名 */
+  base.forEach(function(id){
+    h += '<div class="parow"><div class="ib"><div class="nm">' + esc(ingName(id)) + '</div></div>' +
+         '<button class="swapbtn mini" data-act="pantryDel" data-id="' + esc(id) + '">移出</button></div>';
+  });
+  h += '<div class="actions" style="margin-top:16px">' +
+       ((state.pantry.length || state.notPantry.length)
+         ? '<button class="btn btn-ghost" data-act="pantryReset" style="font-size:13px">恢复出厂</button>' : '') +
+       '<button class="btn btn-primary" data-act="closesheet">好了</button></div>';
+  h += '<div class="foot" style="margin-top:10px">移出以后就按生鲜算：冰箱里没有就是缺，会进采购清单。</div>';
+  return h;
+}
+
+/* ============================================================
    分类管理：加、改名、删。分类只是给你自己逛冰箱用的，
    删掉一类不会删食材——里面的东西全部挪到「其他」。
    ============================================================ */
@@ -4181,6 +4309,11 @@ document.addEventListener('click', function(e){
     if(groupsOf().indexOf(ui.addGrp) < 0) ui.addGrp = groupsOf()[0];
     renderSheet();
   }
+  else if(act === 'sheetPantry'){
+    ui.sheet = true; ui.sheetType = 'pantry';
+    ui.paName = '';   /* 每次打开都从空开始，别把上次没加成的名字留着 */
+    renderSheet();
+  }
   else if(act === 'sheetShelf'){ ui.sheet = true; ui.sheetType = 'shelf'; renderSheet(); }
   else if(act === 'sheetCat'){
     /* 只有从「记一笔 / 保质期设置」里点进来才记「回哪儿」，冰箱页直接点的不留后路 */
@@ -4252,6 +4385,25 @@ document.addEventListener('click', function(e){
     var next = Math.max(1, Math.min(90, cur + (act === 'shPlus' ? 1 : -1)));
     setShelfDays(shId, next, isCus ? shName : null);
     renderSheet();
+  }
+  else if(act === 'pantryAdd'){
+    var pa = document.getElementById('paName');
+    var pv = pa ? pa.value : ui.paName;
+    var pid = pantryAdd(pv);
+    if(pid){
+      save(); ui.paName = '';
+      renderSheet(); renderKeep();
+      var pb = document.getElementById('paName');
+      if(pb && pb.focus) pb.focus();
+    } else renderSheet();
+  }
+  else if(act === 'pantryDel'){
+    pantryDel(el.getAttribute('data-id'));
+    renderSheet(); renderKeep();
+  }
+  else if(act === 'pantryReset'){
+    pantryReset();
+    renderSheet(); renderKeep(); toast('常备品已恢复出厂设置');
   }
   else if(act === 'shReset'){
     state.shelf = {}; state.shelfName = {};
@@ -4335,6 +4487,12 @@ document.addEventListener('input', function(e){
     }
   }
   else if(t.id === 'cusDays'){ ui.cusDays = t.value; ui.cusDaysTouched = true; }
+  /* 常备品输入：边打边告诉你会对上哪样东西，不重绘面板（重绘会顶掉光标） */
+  else if(t.id === 'paName'){
+    ui.paName = t.value;
+    var ph = document.getElementById('paHint');
+    if(ph) ph.innerHTML = pantryHintHtml(t.value);
+  }
   else if(t.id === 'catNew') ui.catNew = t.value;
   else if(t.id === 'catName') ui.catName = t.value;
 });
@@ -4418,6 +4576,13 @@ document.addEventListener('keydown', function(e){
       ui.catEdit = null; ui.catName = '';
       renderSheet(); render();
     } else toast('已经有「' + to0 + '」了');
+    return;
+  }
+  /* 常备品：回车＝点「加进」，两条路走同一个动作，不会一个加一个不加 */
+  if(t.id === 'paName'){
+    e.preventDefault();
+    var pb = document.querySelector('[data-act="pantryAdd"]');
+    if(pb) pb.click();
     return;
   }
   if(t.id !== 'cusName' && t.id !== 'cusDays') return;
@@ -4567,6 +4732,45 @@ if(location.search.indexOf('test') >= 0){
   var cEgg = {protein:findItem('p01'), fiber:findItem('f07'), carb:findItem('c05')};
   chk('常备品不进采购清单', missingOf(cEgg).indexOf('egg') < 0, '缺：' + missingOf(cEgg).join(','));
   chk('常备品不在冰箱列表里', invList().length === 0);
+
+  /* ---- 常备品可以自己补、自己移出 ---- */
+  chk('常备品出厂清单不受影响', pantryList().length === PANTRY.length && !isMyPantry('egg'));
+  chk('调料塞不进常备品', pantryAdd('生抽') === null && !isPantry('shengchou'));
+  var pPasta = pantryAdd('意面');
+  chk('「意面」能加进常备品，并认到已有的食材上',
+      pPasta === 'pasta' && isPantry('pasta') && isMyPantry('pasta'), '加到 ' + pPasta);
+  chk('加进常备品就算家里有，不进采购清单', stockedOf('pasta'));
+  var cPasta = {protein:{needs:['pasta']}, fiber:{needs:[]}, carb:{needs:[]}};
+  chk('常备化之后意面不再要买', missingOf(cPasta).indexOf('pasta') < 0,
+      '缺：' + missingOf(cPasta).join(','));
+  /* 先有库存、后标常备：那几行必须撤掉，否则就成了看不见又会被扣的幽灵库存 */
+  pantryDel('pasta');
+  chk('退回生鲜后没库存就该买', missingOf(cPasta).indexOf('pasta') >= 0);
+  invAdd('pasta', 2);
+  chk('退回生鲜后买了就不缺了', missingOf(cPasta).indexOf('pasta') < 0);
+  pantryAdd('意面');
+  chk('加进常备品会撤掉冰箱里那几份', !state.inventory.some(function(x){ return x.id === 'pasta'; }),
+      '还剩 ' + state.inventory.length + ' 行');
+  pantryDel('egg');
+  chk('出厂项也能移出，移出后按生鲜算', !isPantry('egg') && !stockedOf('egg'));
+  chk('移出鸡蛋后就该买鸡蛋了', missingOf(cEgg).indexOf('egg') >= 0);
+  pantryReset();
+  chk('恢复出厂：egg 回来、自己加的清掉', isPantry('egg') && !isPantry('pasta'));
+  pantryAdd('意面'); save();
+  chk('常备品改动能存住，重开还在', (load().pantry || []).indexOf('pasta') >= 0);
+  var gNoodle = pantryAdd('挂面');
+  chk('库里没有的东西也能直接加进常备品', !!gNoodle && isPantry(gNoodle) && ingName(gNoodle) === '挂面');
+  pantryReset();
+  if(gNoodle) delete state.ings[gNoodle];
+  state.inventory = state.inventory.filter(function(x){ return x.id !== 'pasta'; });
+  save();
+  chk('常备品面板能把清单和入口都画出来', (function(){
+    ui.sheet = true; ui.sheetType = 'pantry'; ui.paName = '意面';
+    var hh = sheetPantry();
+    ui.sheet = false; ui.sheetType = 'settings'; ui.paName = '';
+    return hh.indexOf('常备品') >= 0 && hh.indexOf('加进') >= 0 &&
+           hh.indexOf('已经是常备品') < 0 && hh.indexOf('移出') >= 0;
+  })());
 
   invAdd('tomato', 2);
   chk('买回来按默认保质期算好到期日', invAll('tomato') && invDays(invAll('tomato')) === SHELF.tomato.d,
