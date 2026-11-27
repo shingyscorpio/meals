@@ -2,7 +2,7 @@
    页面本身走「网络优先」——打开一次就是最新的，只有断网才用上一次的兜底；
    图标、清单这些不常变的走「先给缓存、后台更新」。
    原来页面也走缓存优先，结果改完代码关掉重开还是旧的，得靠清缓存才能看到新版 */
-const CACHE = 'meals-v20';
+const CACHE = 'meals-v21';
 const ASSETS = ['./', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -55,9 +55,13 @@ self.addEventListener('fetch', function (e) {
   /* 每日灵感清单 + 菜谱包：必须每次问网络。
      recs.json 走缓存会一直显示昨天那道；
      seed-recipes.json 走缓存的话，点「装最新菜谱」第一次拿到的还是旧包 */
-  const fresh = /\/recs\.json$/.test(url.pathname) || /\/seed-recipes\.json$/.test(url.pathname);
+  /* pack-ver.json 也在里面：它要是走了缓存，手机上就会一直看到「有更新」
+     或者一直看不到——取决于上次缓存的是哪一版 */
+  const isRecs = /\/recs\.json$/.test(url.pathname);
+  const isPackVer = /\/pack-ver\.json$/.test(url.pathname);
+  const fresh = isRecs || isPackVer || /\/seed-recipes\.json$/.test(url.pathname);
   if (fresh) {
-    const name = /\/recs\.json$/.test(url.pathname) ? './recs.json' : './seed-recipes.json';
+    const name = isRecs ? './recs.json' : (isPackVer ? './pack-ver.json' : './seed-recipes.json');
     e.respondWith(
       fetch(req).then(function (r) {
         if (r && r.ok) {
@@ -67,8 +71,9 @@ self.addEventListener('fetch', function (e) {
         return r;
       }).catch(function () {
         return caches.match(name, { ignoreSearch: true }).then(function (h) {
-          return h || new Response(name === './recs.json' ? '{"recs":[]}' : '{"data":null}',
-            { headers: { 'Content-Type': 'application/json' } });
+          if (h) return h;
+          var empty = name === './recs.json' ? '{"recs":[]}' : (name === './pack-ver.json' ? '{}' : '{"data":null}');
+          return new Response(empty, { headers: { 'Content-Type': 'application/json' } });
         });
       })
     );
