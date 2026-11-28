@@ -419,7 +419,8 @@ var ING = {
   chia:'奇亚籽', cilantro:'香菜', passionFruit:'百香果', wonton:'小馄饨',
   pancake:'手抓饼',
   cabbage:'包菜', yuChoy:'油菜', eggplant:'茄子', enoki:'金针菇', nori:'海苔', shiitakeFresh:'香菇',
-  porkBelly:'五花肉', bacon:'培根', pasta:'意面'
+  porkBelly:'五花肉', bacon:'培根', pasta:'意面',
+  rice:'米饭', luncheon:'午餐肉'
 };
 
 /* ============================================================
@@ -490,7 +491,7 @@ var DEFAULT_GROUPS = ['叶菜','果菜','菌菇','根茎','肉类','豆制品','
    意面、挂面、罐头这类「柜子里常有一包」的东西，与其每次买完记账，
    不如直接标成常备——这也是这个功能存在的理由。 */
 var PANTRY = ['egg','yogurt','fruit','milk','mixedGrain','oats','bread','mantou','wonton',
-              'pancake','chickpea','nuts','chia','woodEar','nori']; 
+              'pancake','chickpea','nuts','chia','woodEar','nori','rice','luncheon']; 
 
 /* 示例菜谱不再写死在代码里。它们被抽成同目录的 seed-recipes.json，
    在「设置 → 导入备份」里选这个文件导进来，就变成你自己的普通菜谱——
@@ -511,7 +512,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-27 22:59';
+var BUILD = '2026-11-28 21:51';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -660,7 +661,10 @@ var ING_ALIAS = {
   '青红椒':'greenPepper','红椒':'greenPepper','菜椒':'greenPepper',
   '百香果':'passionFruit','燕麦':'oats','燕麦片':'oats','牛奶':'milk','全麦面包':'bread','面包':'bread',
   '馒头':'mantou','馄饨':'wonton','手抓饼':'pancake','鹰嘴豆':'chickpea','坚果':'nuts','奇亚籽':'chia',
-  '意面':'pasta','意大利面':'pasta','意大利面条':'pasta','直身面':'pasta','spaghetti':'pasta','通心粉':'pasta'
+  '意面':'pasta','意大利面':'pasta','意大利面条':'pasta','直身面':'pasta','spaghetti':'pasta','通心粉':'pasta',
+  /* 炒饭类：剩饭/隔夜饭都是同一件事，别让导入时冒出三个不认识的食材 */
+  '米饭':'rice','剩饭':'rice','剩米饭':'rice','隔夜饭':'rice','冷饭':'rice','白饭':'rice','杂粮饭':'mixedGrain',
+  '午餐肉':'luncheon','世棒':'luncheon','餐肉':'luncheon','spam':'luncheon','SPAM':'luncheon'
 };
 
 function isSeasoning(name){
@@ -5478,6 +5482,28 @@ if(location.search.indexOf('test') >= 0){
       if(ids[x.id]) bad.push('重 id ' + x.id); ids[x.id] = 1;
     });
     return SEED.length >= 40 && bad.length === 0;
+  })());
+
+  chk('菜谱包：每条用料都是认识的食材 id', (function(){
+    /* 写错一个 id，界面上就会显示成一串英文，采购清单也认不出它 */
+    var bad = [];
+    SEED.forEach(function(x){
+      (x.needs || []).forEach(function(id){
+        if(!ING[id] && !(state.ings && state.ings[id] && state.ings[id].n)) bad.push(x.n + ':' + id);
+      });
+    });
+    return bad.length === 0;
+  })());
+
+  chk('新菜：海苔午餐肉炒饭在包里，午餐肉和米饭都认得', (function(){
+    var a = SEED.filter(function(x){ return x.n === '海苔午餐肉炒饭'; })[0];
+    return !!a && a.cat === 'carb' && a.author === 'cc西西柚' &&
+           a.src === 'https://www.xiachufang.com/recipe/107132328/' &&
+           a.needs.join(',') === 'rice,luncheon,egg,corn,nori' &&
+           a.needs.every(function(id){ return !!ING[id]; }) &&
+           a.m.split('\n').length >= 5 &&
+           matchIng('米饭') === 'rice' && matchIng('剩饭') === 'rice' &&
+           matchIng('午餐肉') === 'luncheon' && matchIng('SPAM') === 'luncheon';
   })());
 
   chk('新菜：意面和肉末豆腐蒸蛋都在包里，带来源和做法', (function(){
