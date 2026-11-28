@@ -512,7 +512,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-28 22:48';
+var BUILD = '2026-11-28 22:55';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -3690,12 +3690,20 @@ function sheetSettings(){
        '示例和补录都在这一份里。装库时只往后加，<b>不会覆盖你改过的</b>；已经有的（哪怕你改了名字）会自动跳过。</div></div>' +
        '<button class="btn btn-ghost" data-act="seedAdd" style="width:100%;font-size:14px">装最新菜谱</button>';
   /* 被自己的改动挡住时，「装最新菜谱」会安静地什么都不做（规则如此），
-     以前只说「没有新的」，看着就像我们没改数据。这里给一个明确的覆盖入口 */
+     以前只说「没有新的」，看着就像我们没改数据。这里逐道给覆盖入口——
+     不做「一键全盖」：你改过的可能不止一道，只为一道理赔上其余的改动不值 */
   if(ui.packSkipped && ui.packSkipped.length){
-    h += '<button class="btn" data-act="seedForce" style="width:100%;font-size:14px;margin-top:8px">' +
-         '用包里的版本覆盖这 ' + ui.packSkipped.length + ' 道</button>' +
-         '<div style="font-size:11.5px;color:#A9A398;line-height:1.6;margin-top:5px">' +
-         '只会覆盖：' + esc(ui.packSkipped.join('、')) + '。你自己的改动会被包里这版替换掉。</div>';
+    h += '<div style="font-size:12px;color:#8A8478;line-height:1.7;margin-top:10px">' +
+         '下面这些你手动改过，包里是另一版。想换成包里的，点那一道；不点的一律不动。</div>';
+    ui.packSkipped.forEach(function(sk){
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-top:7px">' +
+           '<span style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+           esc(sk.n) + '</span>' +
+           '<button class="btn" data-act="seedForce" data-key="' + esc(sk.k) + '" ' +
+           'style="flex:0 0 auto;font-size:12px;padding:5px 9px">换成包里这版</button></div>';
+    });
+    h += '<div style="font-size:11.5px;color:#A9A398;line-height:1.6;margin-top:6px">' +
+         '换过之后这道就跟着包走了，你那一版会被替换掉（其余菜谱不受影响）。</div>';
   }
   if(ui.setMsg){
     h += '<div class="impinfo" style="margin-top:9px">' + ui.setMsg + '</div>';
@@ -3727,7 +3735,9 @@ function packKey(it){
   return 'nm:' + String((it && it.n) || '').trim();
 }
 
-function mergePack(list, force){
+/* forceKeys：真要覆盖哪几道，就按 key 点哪几道。原来是「一次全盖」，
+   你改过的菜可能有好几道，为了一道西葫芦把别的改动一起冲掉，太粗暴 */
+function mergePack(list, forceKeys){
   var haveKey = {}, haveName = {}, used = {}, byKey = {}, byName = {};
   state.recipes.forEach(function(r){
     if(!r) return;
@@ -3747,18 +3757,20 @@ function mergePack(list, force){
     /* 两个键都查：改了名字的认 key，手工粘来的（没有 key）认名字 */
     if(haveKey[packKey(src)] || haveName[src.n]){
       var loc = byKey[packKey(src)] || byName[src.n];
-      /* force 是「我要包里这版」：连你改过的也覆盖，覆盖完顺手把 my 记号去掉，
-         不然下一版更新又会被这道记号挡住，用户以为我们没改 */
-      if(loc && (force || (verOf(src) > verOf(loc) && !loc.my))){
+      var kSrc = packKey(src), kLoc = loc ? packKey(loc) : kSrc;
+      /* 点过「换成包里这版」的那一道才强制覆盖，其余照旧按版本号走。
+         覆盖完顺手把 my 记号去掉，不然下一版更新又会被这道记号挡住 */
+      var want = !!(forceKeys && (forceKeys[kSrc] || forceKeys[kLoc]));
+      if(loc && (want || (verOf(src) > verOf(loc) && !loc.my))){
         UPDF.forEach(function(f){
           if(src[f] !== undefined) loc[f] = JSON.parse(JSON.stringify(src[f]));
         });
         loc.v = src.v;
-        if(force) delete loc.my;
+        if(want) delete loc.my;
         upd++; updNames.push(src.n);
       } else {
         /* 被自己的改动挡住的不算「本来就有」，要单独报出来，否则界面会说「已经是最新的」 */
-        if(loc && loc.my) skipMy.push(src.n);
+        if(loc && loc.my) skipMy.push({ k:kLoc, n:src.n });
         dup++;
       }
       return;
@@ -3797,7 +3809,7 @@ function getJSON(url, ok, err){
 
 /* 在应用内部装包。不依赖外部页面写存储——桌面图标和浏览器可能是两套，
    谁打开的就在谁那儿装 */
-function loadPack(url, label, quiet, force){
+function loadPack(url, label, quiet, forceKeys){
   if(!quiet){
     ui.setMsg = '正在取' + label + '…';
     renderSheet();
@@ -3809,7 +3821,7 @@ function loadPack(url, label, quiet, force){
       ui.setMsg = '这个包里没有菜谱，什么都没改。';
       renderSheet(); return;
     }
-    var r = mergePack(list, force);
+    var r = mergePack(list, forceKeys);
     /* 装完就把这一版的指纹记下来：以后开 app 拿它跟仓库比，一样就不再提示。
        提示条点进来的（quiet）也走这里，所以两条入口不会各记各的 */
     state.packSig = packSigOf(list);
@@ -3823,8 +3835,9 @@ function loadPack(url, label, quiet, force){
                  plainBits.push('新增 ' + r.added + ' 道（' + r.names.join('、') + '）'); }
     if(r.upd){ bits.push('更新 <b>' + r.upd + '</b> 道做法（' + r.updNames.join('、') + '）');
                plainBits.push('更新 ' + r.upd + ' 道做法（' + r.updNames.join('、') + '）'); }
-    var skipBit = r.skipMy && r.skipMy.length
-      ? r.skipMy.length + ' 道你改过、没覆盖（' + r.skipMy.join('、') + '）' : '';
+    var skipNames = (r.skipMy || []).map(function(x){ return x.n; });
+    var skipBit = skipNames.length
+      ? skipNames.length + ' 道你改过、没覆盖（' + skipNames.join('、') + '）' : '';
     if(!r.added && !r.upd){
       if(quiet){
         ui.packBusy = 0;
@@ -3835,8 +3848,8 @@ function loadPack(url, label, quiet, force){
         return;
       }
       ui.setMsg = skipBit
-        ? '包里这 ' + r.skipMy.length + ' 道和你本地的不是同一版，但你改动过，按规矩没覆盖：' +
-          r.skipMy.join('、') + '。想换成包里这版，点下面的按钮。'
+        ? '包里这 ' + skipNames.length + ' 道和你本地的不是同一版，但你改动过，按规矩没覆盖：' +
+          skipNames.join('、') + '。想换成包里这版，在下面点那一道。'
         : '没有新的：包里 ' + r.dup + ' 道你都已经有了。现在一共 ' + r.total + ' 道。';
       renderSheet(); return;
     }
@@ -4741,8 +4754,13 @@ document.addEventListener('click', function(e){
   /* 设置 */
   else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; ui.setMsg = ''; ui.packSkipped = []; renderSheet(); }
   else if(act === 'seedAdd'){ loadPack('./seed-recipes.json', '菜谱包'); }
-  /* 明确点了才覆盖「我的」：这是唯一能把你本地那条换成包里那版的入口 */
-  else if(act === 'seedForce'){ loadPack('./seed-recipes.json', '菜谱包', false, true); }
+  /* 明确点了才覆盖「我的」，而且只覆盖点的那一道：这是唯一能把你本地那条换成包里那版的入口 */
+  else if(act === 'seedForce'){
+    var fk = el.dataset.key;
+    if(!fk){ toast('没认出是哪一道，先重开一次设置页'); return; }
+    var fkMap = {}; fkMap[fk] = 1;
+    loadPack('./seed-recipes.json', '菜谱包', false, fkMap);
+  }
   /* 提示条：点条子装包，点 ✕ 表示这一版先不装（换下一版会重新出现） */
   else if(act === 'packUpd'){ installPackQuiet(); }
   else if(act === 'packUpdX'){
@@ -5513,10 +5531,11 @@ if(location.search.indexOf('test') >= 0){
     var keep = loc.m, keepKey = loc.key;
     loc.m = '我自己改的写法'; loc.my = 1; loc.v = 20260101;
     var r = mergePack([{ n:loc.n, key:keepKey, v:20261231, m:'包里这版', cat:loc.cat, needs:loc.needs }]);
-    var skipped = r.upd === 0 && r.skipMy.indexOf(loc.n) >= 0 && loc.m === '我自己改的写法';
-    /* 设置页要给出覆盖按钮，不能只留一句「没有新的」 */
+    var skipped = r.upd === 0 && r.skipMy.some(function(x){ return x.n === loc.n; }) && loc.m === '我自己改的写法';
+    /* 设置页要给出覆盖按钮，不能只留一句「没有新的」；而且要带上是哪一道 */
     ui.packSkipped = r.skipMy;
-    var btn = sheetSettings().indexOf('data-act="seedForce"') >= 0;
+    var sh = sheetSettings();
+    var btn = sh.indexOf('data-act="seedForce"') >= 0 && sh.indexOf('data-key="' + esc(r.skipMy[0].k) + '"') >= 0;
     ui.packSkipped = [];
     /* 备份还原，别把这条断言的脏数据留给后面 */
     var after = state.recipes.filter(function(x){ return x.n === '西葫芦炒鸡蛋'; })[0];
@@ -5530,9 +5549,32 @@ if(location.search.indexOf('test') >= 0){
     if(!loc) return false;
     var keep = loc.m;
     loc.m = '我自己改的写法'; loc.my = 1; loc.v = 20260101;
-    var r = mergePack([{ n:loc.n, key:loc.key, v:20261231, m:'包里这版', cat:loc.cat, needs:loc.needs }], true);
+    var fk = {}; fk[packKey(loc)] = 1;
+    var r = mergePack([{ n:loc.n, key:loc.key, v:20261231, m:'包里这版', cat:loc.cat, needs:loc.needs }], fk);
     var ok = r.upd === 1 && loc.m === '包里这版' && !loc.my;
     loc.m = keep; delete loc.my; loc.v = 20261129;
+    rebuildItems();
+    return ok;
+  })());
+
+  /* 这道是用户实打实抱怨过的：一道西葫芦要换，不能把另外几道自己改的菜一起冲掉 */
+  chk('装包：只覆盖点的那一道，别的「我的」原样保留', (function(){
+    var a = state.recipes.filter(function(x){ return x.n === '西葫芦炒鸡蛋'; })[0];
+    var b = state.recipes.filter(function(x){ return x.n !== '西葫芦炒鸡蛋'; })[0];
+    if(!a || !b) return false;
+    var keepA = a.m, keepB = b.m, keepAv = a.v, keepBv = b.v;
+    a.m = '我改的A'; a.my = 1; a.v = 20260101;
+    b.m = '我改的B'; b.my = 1; b.v = 20260101;
+    var fk = {}; fk[packKey(a)] = 1;
+    var pack = [
+      { n:a.n, key:a.key, v:20261231, m:'包里A', cat:a.cat, needs:a.needs },
+      { n:b.n, key:b.key, v:20261231, m:'包里B', cat:b.cat, needs:b.needs }
+    ];
+    var r = mergePack(pack, fk);
+    var ok = a.m === '包里A' && b.m === '我改的B' && !a.my && b.my === 1 &&
+             r.upd === 1 && r.skipMy.length === 1 && r.skipMy[0].n === b.n;
+    a.m = keepA; delete a.my; a.v = keepAv;
+    b.m = keepB; delete b.my; b.v = keepBv;
     rebuildItems();
     return ok;
   })());
