@@ -512,7 +512,7 @@ var CATN = {protein:'蛋白', fiber:'纤维', carb:'碳水'};
    ============================================================ */
 var KEY = 'zaocan.demo.v4';
 /* 改完东西改这里，方便你核对手机上打开的是不是新版 */
-var BUILD = '2026-11-28 21:51';
+var BUILD = '2026-11-28 22:48';
 var TASTE_W = 0;   /* 口味权重：按 B 方案设 0，只记录不扣分 */
 
 function dstr(off){
@@ -2522,7 +2522,7 @@ var ui = { tab:'today', libCat:'all', sheet:false, sheetType:'settings', editId:
            nmName:'', nmAuthor:'', nmSrc:'', impInfo:'', pendFrom:'', openM:{},
            bkText:'', bkMsg:null, rsTxt:'', rsInfo:null, rsParsed:null, clash:null,
            cusName:'', cusDays:null, cusDaysTouched:false, forceNew:false, addMode:false, paName:'',
-           packVer:null, packUpd:null, packBusy:0,
+           packVer:null, packUpd:null, packBusy:0, packSkipped:[],
            gEdit:false, catEdit:null, catName:'', catNew:'', catFrom:null,
            catOpen:null, gMove:null, recsAll:false, recsOpen:false, recInfo:'', recFull:'' };
 (function(){
@@ -3689,6 +3689,14 @@ function sheetSettings(){
        '<div style="font-size:12px;color:#A9A398;line-height:1.7;margin-bottom:9px">' +
        '示例和补录都在这一份里。装库时只往后加，<b>不会覆盖你改过的</b>；已经有的（哪怕你改了名字）会自动跳过。</div></div>' +
        '<button class="btn btn-ghost" data-act="seedAdd" style="width:100%;font-size:14px">装最新菜谱</button>';
+  /* 被自己的改动挡住时，「装最新菜谱」会安静地什么都不做（规则如此），
+     以前只说「没有新的」，看着就像我们没改数据。这里给一个明确的覆盖入口 */
+  if(ui.packSkipped && ui.packSkipped.length){
+    h += '<button class="btn" data-act="seedForce" style="width:100%;font-size:14px;margin-top:8px">' +
+         '用包里的版本覆盖这 ' + ui.packSkipped.length + ' 道</button>' +
+         '<div style="font-size:11.5px;color:#A9A398;line-height:1.6;margin-top:5px">' +
+         '只会覆盖：' + esc(ui.packSkipped.join('、')) + '。你自己的改动会被包里这版替换掉。</div>';
+  }
   if(ui.setMsg){
     h += '<div class="impinfo" style="margin-top:9px">' + ui.setMsg + '</div>';
   }
@@ -3719,7 +3727,7 @@ function packKey(it){
   return 'nm:' + String((it && it.n) || '').trim();
 }
 
-function mergePack(list){
+function mergePack(list, force){
   var haveKey = {}, haveName = {}, used = {}, byKey = {}, byName = {};
   state.recipes.forEach(function(r){
     if(!r) return;
@@ -3729,7 +3737,7 @@ function mergePack(list){
   });
   /* 装包前留一份快照。逻辑再稳也架不住意外，留一份总比没有强 */
   try{ localStorage.setItem(KEY + '.prepack', JSON.stringify(state)); }catch(e){}
-  var added = 0, dup = 0, upd = 0, names = [], updNames = [];
+  var added = 0, dup = 0, upd = 0, names = [], updNames = [], skipMy = [];
   /* 包里带的版本号：补全后的做法比库里新，才升级；你手动改过（my）的一律不动 */
   var verOf = function(x){ return Number(x && x.v) || 0; };
   var UPDF = ['n','cat','hand','wall','fire','vessel','staple','needs','taste',
@@ -3739,13 +3747,20 @@ function mergePack(list){
     /* 两个键都查：改了名字的认 key，手工粘来的（没有 key）认名字 */
     if(haveKey[packKey(src)] || haveName[src.n]){
       var loc = byKey[packKey(src)] || byName[src.n];
-      if(loc && verOf(src) > verOf(loc) && !loc.my){
+      /* force 是「我要包里这版」：连你改过的也覆盖，覆盖完顺手把 my 记号去掉，
+         不然下一版更新又会被这道记号挡住，用户以为我们没改 */
+      if(loc && (force || (verOf(src) > verOf(loc) && !loc.my))){
         UPDF.forEach(function(f){
           if(src[f] !== undefined) loc[f] = JSON.parse(JSON.stringify(src[f]));
         });
         loc.v = src.v;
+        if(force) delete loc.my;
         upd++; updNames.push(src.n);
-      } else dup++;
+      } else {
+        /* 被自己的改动挡住的不算「本来就有」，要单独报出来，否则界面会说「已经是最新的」 */
+        if(loc && loc.my) skipMy.push(src.n);
+        dup++;
+      }
       return;
     }
     var it = JSON.parse(JSON.stringify(src));
@@ -3762,7 +3777,7 @@ function mergePack(list){
     added++; names.push(it.n);
   });
   rebuildItems(); save();
-  return { added:added, dup:dup, upd:upd, total:ITEMS.length, names:names, updNames:updNames };
+  return { added:added, dup:dup, upd:upd, total:ITEMS.length, names:names, updNames:updNames, skipMy:skipMy };
 }
 
 function getJSON(url, ok, err){
@@ -3782,7 +3797,7 @@ function getJSON(url, ok, err){
 
 /* 在应用内部装包。不依赖外部页面写存储——桌面图标和浏览器可能是两套，
    谁打开的就在谁那儿装 */
-function loadPack(url, label, quiet){
+function loadPack(url, label, quiet, force){
   if(!quiet){
     ui.setMsg = '正在取' + label + '…';
     renderSheet();
@@ -3794,37 +3809,49 @@ function loadPack(url, label, quiet){
       ui.setMsg = '这个包里没有菜谱，什么都没改。';
       renderSheet(); return;
     }
-    var r = mergePack(list);
+    var r = mergePack(list, force);
     /* 装完就把这一版的指纹记下来：以后开 app 拿它跟仓库比，一样就不再提示。
        提示条点进来的（quiet）也走这里，所以两条入口不会各记各的 */
     state.packSig = packSigOf(list);
     state.packSigSkip = '';
     ui.packUpd = null;
+    /* 记下被「我的」挡住的菜，设置页据此给一个覆盖按钮 */
+    ui.packSkipped = r.skipMy || [];
     save();
     var bits = [], plainBits = [];
     if(r.added){ bits.push('新增 <b>' + r.added + '</b> 道（' + r.names.join('、') + '）');
                  plainBits.push('新增 ' + r.added + ' 道（' + r.names.join('、') + '）'); }
     if(r.upd){ bits.push('更新 <b>' + r.upd + '</b> 道做法（' + r.updNames.join('、') + '）');
                plainBits.push('更新 ' + r.upd + ' 道做法（' + r.updNames.join('、') + '）'); }
+    var skipBit = r.skipMy && r.skipMy.length
+      ? r.skipMy.length + ' 道你改过、没覆盖（' + r.skipMy.join('、') + '）' : '';
     if(!r.added && !r.upd){
       if(quiet){
         ui.packBusy = 0;
-        toast('已经是最新的：' + r.dup + ' 道都有了，一共 ' + r.total + ' 道');
+        /* 这种情况最常见也最容易被误会成「你们没改」：包里确实是新的一版，
+           只是本机这条被你编辑过，规则不许覆盖。要说清楚，别再说「已经是最新的」 */
+        toast(skipBit || ('已经是最新的：' + r.dup + ' 道都有了，一共 ' + r.total + ' 道'));
         if(ui.tab === 'lib') renderKeep(); else render();
         return;
       }
-      ui.setMsg = '没有新的：包里 ' + r.dup + ' 道你都已经有了。现在一共 ' + r.total + ' 道。';
+      ui.setMsg = skipBit
+        ? '包里这 ' + r.skipMy.length + ' 道和你本地的不是同一版，但你改动过，按规矩没覆盖：' +
+          r.skipMy.join('、') + '。想换成包里这版，点下面的按钮。'
+        : '没有新的：包里 ' + r.dup + ' 道你都已经有了。现在一共 ' + r.total + ' 道。';
       renderSheet(); return;
     }
     if(quiet){
       ui.packBusy = 0;
-      toast('装好了：' + plainBits.join('，') + (r.dup ? '，跳过 ' + r.dup + ' 道' : '') + '，一共 ' + r.total + ' 道');
+      toast('装好了：' + plainBits.join('，') +
+            (r.dup ? '，跳过 ' + r.dup + ' 道' : '') +
+            (skipBit ? '，另有 ' + skipBit : '') + '，一共 ' + r.total + ' 道');
       /* 分类计数、列表都要跟着变；停在菜谱页就就地刷新，别把人弹回顶部 */
       if(ui.tab === 'lib') renderKeep(); else render();
       return;
     }
     ui.setMsg = '装好了：' + bits.join('，') +
                 (r.dup ? '，跳过 ' + r.dup + ' 道本来就有的' : '') +
+                (skipBit ? '；另有 ' + skipBit : '') +
                 '。现在一共 ' + r.total + ' 道。';
     renderSheet();
   }, function(e){
@@ -4712,8 +4739,10 @@ document.addEventListener('click', function(e){
   else if(act === 'useItUp'){ useItUp(id); }
 
   /* 设置 */
-  else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; ui.setMsg = ''; renderSheet(); }
+  else if(act === 'sheet'){ ui.sheet = true; ui.sheetType = 'settings'; ui.setMsg = ''; ui.packSkipped = []; renderSheet(); }
   else if(act === 'seedAdd'){ loadPack('./seed-recipes.json', '菜谱包'); }
+  /* 明确点了才覆盖「我的」：这是唯一能把你本地那条换成包里那版的入口 */
+  else if(act === 'seedForce'){ loadPack('./seed-recipes.json', '菜谱包', false, true); }
   /* 提示条：点条子装包，点 ✕ 表示这一版先不装（换下一版会重新出现） */
   else if(act === 'packUpd'){ installPackQuiet(); }
   else if(act === 'packUpdX'){
@@ -5473,6 +5502,39 @@ if(location.search.indexOf('test') >= 0){
     ui.setMsg = '';
     var sh = sheetSettings();
     return sh.indexOf('菜谱包') >= 0 && sh.indexOf('data-act="seedAdd"') >= 0;
+  })());
+
+  /* 这两条护着一个真实踩过的坑：本地那条被标成「我的」之后，装包永远跳过它，
+     界面只说「已经是最新的」，用户以为数据没改 */
+  chk('装包：标成「我的」的菜默认跳过，并且如实报出来', (function(){
+    var bak = JSON.parse(JSON.stringify(state.recipes));
+    var loc = state.recipes.filter(function(x){ return x.n === '西葫芦炒鸡蛋'; })[0];
+    if(!loc) return false;
+    var keep = loc.m, keepKey = loc.key;
+    loc.m = '我自己改的写法'; loc.my = 1; loc.v = 20260101;
+    var r = mergePack([{ n:loc.n, key:keepKey, v:20261231, m:'包里这版', cat:loc.cat, needs:loc.needs }]);
+    var skipped = r.upd === 0 && r.skipMy.indexOf(loc.n) >= 0 && loc.m === '我自己改的写法';
+    /* 设置页要给出覆盖按钮，不能只留一句「没有新的」 */
+    ui.packSkipped = r.skipMy;
+    var btn = sheetSettings().indexOf('data-act="seedForce"') >= 0;
+    ui.packSkipped = [];
+    /* 备份还原，别把这条断言的脏数据留给后面 */
+    var after = state.recipes.filter(function(x){ return x.n === '西葫芦炒鸡蛋'; })[0];
+    after.m = keep; after.v = (bak.filter(function(x){ return x.n === '西葫芦炒鸡蛋'; })[0] || {}).v;
+    delete after.my;
+    return skipped && btn;
+  })());
+
+  chk('装包：点了覆盖就用包里这版，并把「我的」记号去掉', (function(){
+    var loc = state.recipes.filter(function(x){ return x.n === '西葫芦炒鸡蛋'; })[0];
+    if(!loc) return false;
+    var keep = loc.m;
+    loc.m = '我自己改的写法'; loc.my = 1; loc.v = 20260101;
+    var r = mergePack([{ n:loc.n, key:loc.key, v:20261231, m:'包里这版', cat:loc.cat, needs:loc.needs }], true);
+    var ok = r.upd === 1 && loc.m === '包里这版' && !loc.my;
+    loc.m = keep; delete loc.my; loc.v = 20261129;
+    rebuildItems();
+    return ok;
   })());
 
   chk('菜谱包：没有重名也没有重 id', (function(){
